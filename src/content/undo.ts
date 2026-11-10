@@ -1,9 +1,10 @@
-import { getRadioGroupMembers } from './matcher'
+import { comboboxDisplayText } from './combobox'
+import { getRadioGroupMembers, isComboboxControl } from './matcher'
 
 export type UndoEntry = {
   element: HTMLElement
   previous: {
-    kind: 'value' | 'checked' | 'select' | 'radio'
+    kind: 'value' | 'checked' | 'select' | 'radio' | 'combobox'
     value?: string
     checked?: boolean
     checkedMember?: HTMLInputElement | null
@@ -34,9 +35,15 @@ export function capturePrevious(el: HTMLElement): UndoEntry['previous'] {
     if (type === 'checkbox') {
       return { kind: 'checked', checked: el.checked }
     }
+    if (isComboboxControl(el)) {
+      return { kind: 'combobox', value: el.value }
+    }
   }
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     return { kind: 'value', value: el.value }
+  }
+  if (isComboboxControl(el)) {
+    return { kind: 'combobox', value: comboboxDisplayText(el) }
   }
   return { kind: 'value', value: '' }
 }
@@ -132,6 +139,40 @@ export function undoLastFill(): { restored: number } {
       element.dispatchEvent(new Event('input', { bubbles: true }))
       element.dispatchEvent(new Event('change', { bubbles: true }))
       if (element.value === (previous.value ?? '')) restored++
+      continue
+    }
+
+    if (previous.kind === 'combobox') {
+      const want = previous.value ?? ''
+      if (element instanceof HTMLInputElement) {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          'value',
+        )
+        if (descriptor?.set) descriptor.set.call(element, want)
+        else element.value = want
+        element.dispatchEvent(new Event('input', { bubbles: true }))
+        element.dispatchEvent(new Event('change', { bubbles: true }))
+        if (element.value === want) restored++
+      } else {
+        // Best-effort for button/div hosts — scripted widgets may keep internal state.
+        if ('value' in element) {
+          try {
+            ;(element as HTMLInputElement).value = want
+          } catch {
+            // ignore
+          }
+        }
+        if (!want) element.textContent = ''
+        else if (comboboxDisplayText(element) !== want) {
+          const label = element.querySelector('[class*="single-value"], [data-value]')
+          if (label) label.textContent = want
+          else element.textContent = want
+        }
+        element.dispatchEvent(new Event('input', { bubbles: true }))
+        element.dispatchEvent(new Event('change', { bubbles: true }))
+        if (comboboxDisplayText(element) === want || want === '') restored++
+      }
     }
   }
   snapshot = []

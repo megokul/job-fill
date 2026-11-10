@@ -62,6 +62,7 @@ npm run build
 ## Known limits
 
 - In-page navigation and later steps of multi-step forms are not refilled automatically after the initial autofill-on-load window.
+- Undo restores typed text on scripted dropdowns (comboboxes) best-effort; it may not clear a widget’s internal selection if the control keeps state outside the DOM value.
 
 ## Privacy
 

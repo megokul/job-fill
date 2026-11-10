@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, EMPTY_PROFILE } from '../shared/types'
 import { fillCombobox } from './combobox'
 import { fillPage } from './filler'
+import {
+  beginUndoSnapshot,
+  capturePrevious,
+  recordUndo,
+  undoLastFill,
+} from './undo'
 
 const alwaysVisible = () => true
 
@@ -114,5 +120,19 @@ describe('fillPage combobox integration', () => {
     )
     expect(result.filled.some((f) => f.key === 'location')).toBe(true)
     expect((document.getElementById('loc') as HTMLInputElement).value).toBe('Austin, TX')
+  })
+})
+
+describe('combobox undo', () => {
+  it('restores the previous input value after a combobox fill', async () => {
+    const input = mountTypeahead()
+    beginUndoSnapshot()
+    const previous = capturePrevious(input)
+    expect(await fillCombobox(input, 'Remote', 'location')).toBe(true)
+    recordUndo({ element: input, previous })
+    expect(input.value).toBe('Remote')
+    const { restored } = undoLastFill()
+    expect(restored).toBe(1)
+    expect(input.value).toBe('')
   })
 })
