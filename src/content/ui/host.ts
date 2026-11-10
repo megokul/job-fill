@@ -1,4 +1,4 @@
-type HighlightKind = 'hover' | 'selected' | 'filled'
+type HighlightKind = 'hover' | 'selected' | 'filled' | 'badge'
 
 type Box = { top: number; left: number; width: number; height: number }
 
@@ -6,7 +6,10 @@ const HOST_TAG = 'job-fill-root'
 
 let shadow: ShadowRoot | null = null
 let highlightLayer: HTMLElement | null = null
-const highlightBoxes = new Map<string, { el: HTMLElement; target: HTMLElement; kind: HighlightKind }>()
+const highlightBoxes = new Map<
+  string,
+  { el: HTMLElement; target: HTMLElement; kind: HighlightKind; label?: string }
+>()
 
 let toastHideTimer: number | undefined
 let toastRemainingMs = 0
@@ -37,6 +40,11 @@ export function ensureUiHost(): ShadowRoot {
     .box.hover { border: 2px solid #f59e0b; }
     .box.selected { border: 2px solid #0f766e; }
     .box.filled { border: 2px solid #0f766e; }
+    .box.badge {
+      border: none; width: 18px; height: 18px; border-radius: 999px;
+      background: #0f766e; color: #fff; font: 700 11px system-ui, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+    }
     @media (prefers-reduced-motion: reduce) {
       .box.filled { transition: none; }
     }
@@ -154,10 +162,29 @@ export function setHighlight(
     entry.kind = kind
     entry.el.className = `box ${kind}`
   }
-  reposition(entry.el, target)
+  reposition(entry.el, target, kind === 'badge')
   if (durationMs) {
     window.setTimeout(() => clearHighlight(id), durationMs)
   }
+}
+
+export function setBadge(id: string, target: HTMLElement, label: string): void {
+  ensureUiHost()
+  let entry = highlightBoxes.get(id)
+  if (!entry) {
+    const box = document.createElement('div')
+    box.className = 'box badge'
+    highlightLayer!.appendChild(box)
+    entry = { el: box, target, kind: 'badge', label }
+    highlightBoxes.set(id, entry)
+  } else {
+    entry.target = target
+    entry.kind = 'badge'
+    entry.label = label
+    entry.el.className = 'box badge'
+  }
+  entry.el.textContent = label
+  reposition(entry.el, target, true)
 }
 
 export function clearHighlight(id: string): void {
@@ -173,8 +200,15 @@ export function clearHighlights(kind?: HighlightKind): void {
   }
 }
 
-function reposition(box: HTMLElement, target: HTMLElement): void {
+function reposition(box: HTMLElement, target: HTMLElement, badge = false): void {
   const rect = target.getBoundingClientRect()
+  if (badge) {
+    box.style.top = `${Math.max(0, rect.top - 8)}px`
+    box.style.left = `${Math.max(0, rect.left - 8)}px`
+    box.style.width = '18px'
+    box.style.height = '18px'
+    return
+  }
   const b: Box = {
     top: rect.top - 2,
     left: rect.left - 2,
@@ -189,7 +223,7 @@ function reposition(box: HTMLElement, target: HTMLElement): void {
 
 function repositionAll(): void {
   for (const entry of highlightBoxes.values()) {
-    reposition(entry.el, entry.target)
+    reposition(entry.el, entry.target, entry.kind === 'badge')
   }
 }
 
