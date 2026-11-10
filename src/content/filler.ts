@@ -55,6 +55,8 @@ export async function fillPage(
   options?: {
     isVisible?: (el: HTMLElement) => boolean
     customAnswers?: CustomAnswer[]
+    /** Watcher: skip and never re-fill these elements (even if cleared). */
+    alreadyFilled?: WeakSet<HTMLElement>
   },
 ): Promise<FillResult> {
   beginUndoSnapshot()
@@ -63,14 +65,18 @@ export async function fillPage(
   let skippedNonEmpty = 0
   const filledElements = new Set<HTMLElement>()
   const customAnswers = options?.customAnswers ?? []
+  const alreadyFilled = options?.alreadyFilled
 
-  const elements = collectFillableElements(document, options)
+  const elements = collectFillableElements(document, options).filter(
+    (el) => !alreadyFilled?.has(el),
+  )
   const applicable = mappingsForUrl(formMappings, location.href)
 
   for (const mapping of applicable) {
     for (const field of mapping.fields) {
       const el = resolveMappedElement(field, elements)
       if (!el || filledElements.has(el)) continue
+      if (alreadyFilled?.has(el)) continue
       if (!isEmptyControl(el)) {
         skippedNonEmpty++
         continue
@@ -82,6 +88,7 @@ export async function fillPage(
         const previous = capturePrevious(el)
         if (await applyValue(el, answer.answer, null, true)) {
           filledElements.add(el)
+          alreadyFilled?.add(el)
           recordUndo({ element: el, previous })
           filled.push({
             label: bestLabel(extractSignals(el)),
@@ -99,6 +106,7 @@ export async function fillPage(
       const previous = capturePrevious(el)
       if (await applyValue(el, value, field.profileKey, false)) {
         filledElements.add(el)
+        alreadyFilled?.add(el)
         recordUndo({ element: el, previous })
         filled.push({
           label: bestLabel(extractSignals(el)),
@@ -116,11 +124,13 @@ export async function fillPage(
 
   for (const match of matches) {
     if (filledElements.has(match.element)) continue
+    if (alreadyFilled?.has(match.element)) continue
     const value = resolveValue(profile, match.fillKey)
     if (!String(value ?? '').trim()) continue
     const previous = capturePrevious(match.element)
     if (await applyValue(match.element, value, match.fillKey, false)) {
       filledElements.add(match.element)
+      alreadyFilled?.add(match.element)
       recordUndo({ element: match.element, previous })
       filled.push({
         label: bestLabel(match.signals),

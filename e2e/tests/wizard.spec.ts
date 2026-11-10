@@ -39,4 +39,57 @@ test.describe('Wizard', () => {
     await expect(page.locator('#addr1')).toHaveValue('')
     await expect(page.locator('#city')).toHaveValue('')
   })
+
+  test('typing on step 1 does not stop step 2 autofill; typed text is kept', async ({
+    page,
+    seedStore,
+  }) => {
+    await seedStore({
+      settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
+    })
+    await page.goto(`${ORIGIN_A}/wizard.html`)
+    await page.reload()
+    await expect
+      .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
+      .toBe('Ada')
+
+    await page.locator('#first').click()
+    await page.locator('#first').pressSequentially('X')
+    await expect(page.locator('#first')).toHaveValue('AdaX')
+
+    await page.locator('#next').click()
+    await expect(page).toHaveURL(/step=2/)
+    await expect(page.locator('#addr1')).toHaveValue('1 Analytical Engine Rd', {
+      timeout: 8_000,
+    })
+    await expect(page.locator('#city')).toHaveValue('London')
+  })
+
+  test('cleared step-2 field is not refilled after a later DOM change', async ({
+    page,
+    seedStore,
+  }) => {
+    await seedStore({
+      settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
+    })
+    await page.goto(`${ORIGIN_A}/wizard.html`)
+    await page.reload()
+    await expect
+      .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
+      .toBe('Ada')
+    await page.locator('#next').click()
+    await expect(page.locator('#city')).toHaveValue('London', { timeout: 8_000 })
+
+    await page.locator('#city').fill('')
+    await expect(page.locator('#city')).toHaveValue('')
+
+    await page.evaluate(() => {
+      const el = document.createElement('div')
+      el.id = 'harmless'
+      el.textContent = 'noop'
+      document.body.appendChild(el)
+    })
+    await page.waitForTimeout(1500)
+    await expect(page.locator('#city')).toHaveValue('')
+  })
 })

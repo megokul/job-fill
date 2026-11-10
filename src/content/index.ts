@@ -18,16 +18,6 @@ type FrameApi = {
   toast: (summary: ToastSummary) => void
 }
 
-let userTyped = false
-
-document.addEventListener(
-  'input',
-  (event) => {
-    if (event.isTrusted) userTyped = true
-  },
-  true,
-)
-
 const api: FrameApi = {
   fill: async () => runFill(),
   undo: async () => undoLastFill(),
@@ -89,10 +79,12 @@ function startAutofillWatcher(args: {
   let lastHref = location.href
   let seen = new Set<HTMLElement>()
   let hrefPollId = 0
+  const alreadyFilled = new WeakSet<HTMLElement>()
 
   const tryFill = (): Promise<FillResult> =>
     fillPage(args.profile, args.formMappings, args.settings, {
       customAnswers: args.customAnswers,
+      alreadyFilled,
     })
 
   const rememberSeen = (): void => {
@@ -129,7 +121,7 @@ function startAutofillWatcher(args: {
   }
 
   const runAutoFill = async (): Promise<void> => {
-    if (stopped || userTyped || autoFillCount >= 10) {
+    if (stopped || autoFillCount >= 10) {
       teardown()
       return
     }
@@ -140,7 +132,7 @@ function startAutofillWatcher(args: {
     if (result.filled.length > 0) {
       showAutofillToast(result)
     }
-    if (autoFillCount >= 10 || userTyped) teardown()
+    if (autoFillCount >= 10) teardown()
   }
 
   const shouldRefill = (): boolean => {
@@ -150,11 +142,11 @@ function startAutofillWatcher(args: {
   }
 
   const schedule = (): void => {
-    if (stopped || userTyped) return
+    if (stopped) return
     if (debounceTimer !== undefined) window.clearTimeout(debounceTimer)
     debounceTimer = window.setTimeout(() => {
       debounceTimer = undefined
-      if (stopped || userTyped) return
+      if (stopped) return
       if (!shouldRefill()) return
       void runAutoFill()
     }, 500)
