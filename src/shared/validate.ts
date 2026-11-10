@@ -1,12 +1,13 @@
+import { FILL_KEYS } from './synonyms'
 import {
   DEFAULT_SETTINGS,
   EMPTY_PROFILE,
   PROFILE_KEYS,
   type CustomAnswer,
   type FieldMapping,
+  type FillKey,
   type FormMapping,
   type Profile,
-  type ProfileKey,
   type Settings,
   type Store,
   type YesNo,
@@ -185,41 +186,48 @@ function parseMappings(raw: unknown, errors: string[]): FormMapping[] {
 function parseFields(raw: unknown, errors: string[]): FieldMapping[] {
   if (!Array.isArray(raw)) return []
   const out: FieldMapping[] = []
+  const fillKeySet = new Set<string>(FILL_KEYS)
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const f = item as Record<string, unknown>
-    const profileKey = f.profileKey
-    if (typeof profileKey !== 'string' || !PROFILE_KEYS.includes(profileKey as ProfileKey)) {
-      // customAnswerId allowed in Phase 4; for now skip unknown
-      if (
-        f.customAnswerId &&
-        typeof f.customAnswerId === 'string'
-      ) {
-        // keep for Phase 4 shape if present in types
-      } else {
-        errors.push(`Dropped field with unknown profileKey: ${String(profileKey)}`)
-        continue
-      }
-    }
     const id =
       typeof f.id === 'string' && UUID_RE.test(f.id) ? f.id : crypto.randomUUID()
     const match =
       f.match && typeof f.match === 'object'
         ? (f.match as FieldMapping['match'])
         : {}
+    const baseMatch = {
+      name: typeof match.name === 'string' ? match.name : undefined,
+      id: typeof match.id === 'string' ? match.id : undefined,
+      label: typeof match.label === 'string' ? match.label : undefined,
+      placeholder:
+        typeof match.placeholder === 'string' ? match.placeholder : undefined,
+      autocomplete:
+        typeof match.autocomplete === 'string' ? match.autocomplete : undefined,
+    }
+
+    const customId =
+      typeof f.customAnswerId === 'string' && UUID_RE.test(f.customAnswerId)
+        ? f.customAnswerId
+        : null
+    const profileKey =
+      typeof f.profileKey === 'string' && fillKeySet.has(f.profileKey)
+        ? (f.profileKey as FillKey)
+        : null
+
+    if (!profileKey && !customId) {
+      errors.push(
+        `Dropped field with neither valid profileKey nor customAnswerId: ${String(f.profileKey ?? f.customAnswerId)}`,
+      )
+      continue
+    }
+
     const field: FieldMapping = {
       id,
       selector: typeof f.selector === 'string' ? f.selector : undefined,
-      match: {
-        name: typeof match.name === 'string' ? match.name : undefined,
-        id: typeof match.id === 'string' ? match.id : undefined,
-        label: typeof match.label === 'string' ? match.label : undefined,
-        placeholder:
-          typeof match.placeholder === 'string' ? match.placeholder : undefined,
-        autocomplete:
-          typeof match.autocomplete === 'string' ? match.autocomplete : undefined,
-      },
-      profileKey: profileKey as ProfileKey,
+      match: baseMatch,
+      ...(profileKey ? { profileKey } : {}),
+      ...(customId ? { customAnswerId: customId } : {}),
     }
     out.push(field)
   }

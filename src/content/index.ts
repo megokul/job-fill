@@ -1,6 +1,6 @@
 import type { FillResult, Message } from '../shared/messages'
 import { mappingsForUrl } from '../shared/pathMatch'
-import { getStore, saveFormMapping } from '../shared/storage'
+import { getStore, saveCustomAnswers, saveFormMapping } from '../shared/storage'
 import type { FormMapping } from '../shared/types'
 import { fillPage, showToast } from './filler'
 import { collectFillableElements } from './matcher'
@@ -161,7 +161,11 @@ async function runStartMapMode(): Promise<{ ok: true }> {
 
   startMapMode({
     existing,
-    onSave: async (mapping: FormMapping) => {
+    customAnswers: store.customAnswers,
+    onSave: async (mapping: FormMapping, newAnswers) => {
+      if (newAnswers.length) {
+        await saveCustomAnswers([...store.customAnswers, ...newAnswers])
+      }
       await saveFormMapping(mapping)
     },
   })

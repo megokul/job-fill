@@ -10,6 +10,7 @@ import type {
   Profile,
   Settings,
 } from '../shared/types'
+import { FILL_KEY_LABELS } from '../shared/types'
 import {
   collectFillableElements,
   extractSignals,
@@ -58,13 +59,12 @@ export function fillPage(
         const answer = customAnswers.find((a) => a.id === field.customAnswerId)
         if (!answer?.answer.trim()) continue
         const previous = capturePrevious(el)
-        // Custom answers always fill as free text
-        if (setControlValue(el, answer.answer, 'howDidYouHear')) {
+        if (setControlValue(el, answer.answer, null)) {
           filledElements.add(el)
           recordUndo({ element: el, fillKey: 'howDidYouHear', previous })
           filled.push({
             label: bestLabel(extractSignals(el)),
-            key: 'howDidYouHear',
+            target: answer.question || 'Custom answer',
             source: 'custom',
           })
           if (settings.highlightFilled) highlight(el)
@@ -81,6 +81,7 @@ export function fillPage(
         recordUndo({ element: el, fillKey: field.profileKey, previous })
         filled.push({
           label: bestLabel(extractSignals(el)),
+          target: FILL_KEY_LABELS[field.profileKey],
           key: field.profileKey,
           source: 'mapping',
         })
@@ -102,6 +103,7 @@ export function fillPage(
       recordUndo({ element: match.element, fillKey: match.fillKey, previous })
       filled.push({
         label: bestLabel(match.signals),
+        target: FILL_KEY_LABELS[match.fillKey],
         key: match.fillKey,
         source: 'heuristic',
       })
@@ -197,7 +199,7 @@ export function buildSelector(el: HTMLElement): string {
 export function setControlValue(
   el: HTMLElement,
   value: string,
-  fillKey: FillKey,
+  fillKey: FillKey | null,
 ): boolean {
   if (el instanceof HTMLSelectElement) {
     return selectOption(el, value, fillKey)
@@ -206,7 +208,7 @@ export function setControlValue(
   if (el instanceof HTMLInputElement) {
     const type = (el.type || 'text').toLowerCase()
     if (type === 'checkbox') {
-      if (!CHECKBOX_KEYS.has(fillKey)) return false
+      if (!fillKey || !CHECKBOX_KEYS.has(fillKey)) return false
       const shouldCheck = toBoolean(value)
       if (shouldCheck === null) return false
       return setChecked(el, shouldCheck)
@@ -236,7 +238,7 @@ export function selectOptionForTest(
 function selectOption(
   select: HTMLSelectElement,
   value: string,
-  fillKey: FillKey,
+  fillKey: FillKey | null,
 ): boolean {
   const normalized = value.trim().toLowerCase()
   if (!normalized) return false
@@ -272,7 +274,7 @@ function selectOption(
       ? stateAliases(value)
       : fillKey === 'country'
         ? countryAliases(value)
-        : []
+        : ([] as string[])
   for (const alias of aliases) {
     const a = alias.toLowerCase()
     for (const opt of Array.from(select.options)) {

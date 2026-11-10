@@ -282,7 +282,12 @@ function resultCard(
             'ul',
             { className: 'list' },
             ...filled.map((f) =>
-              h('li', null, h('span', null, f.label || f.key), h('span', { className: 'hint' }, f.source)),
+              h(
+                'li',
+                null,
+                h('span', null, f.target || f.label),
+                h('span', { className: 'hint' }, f.source),
+              ),
             ),
           ),
         )

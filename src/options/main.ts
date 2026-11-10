@@ -14,6 +14,7 @@ import {
 import {
   EMPTY_PROFILE,
   PROFILE_KEYS,
+  FILL_KEY_LABELS,
   PROFILE_LABELS,
   type CustomAnswer,
   type FormMapping,
@@ -496,7 +497,12 @@ function renderSites(): void {
               h(
                 'li',
                 null,
-                f.profileKey ? PROFILE_LABELS[f.profileKey] : `Custom ${f.customAnswerId}`,
+                f.profileKey
+                  ? FILL_KEY_LABELS[f.profileKey]
+                  : `Custom: ${
+                      store.customAnswers.find((a) => a.id === f.customAnswerId)?.question ||
+                      f.customAnswerId
+                    }`,
                 ' — ',
                 f.match.label || f.selector || '',
               ),

@@ -1,14 +1,19 @@
 import { defaultPathPattern } from '../shared/pathPattern'
-import type { FormMapping, ProfileKey } from '../shared/types'
-import { PROFILE_KEYS, PROFILE_LABELS } from '../shared/types'
+import type { CustomAnswer, FillKey, FormMapping } from '../shared/types'
+import { FILL_KEY_LABELS } from '../shared/types'
+import { FILL_KEYS } from '../shared/synonyms'
 import { buildSelector, showToast } from './filler'
 import { collectFillableElements, extractSignals, matchFields } from './matcher'
 import { clearHighlight, clearHighlights, getUiRoot, setHighlight } from './ui/host'
 
-type SaveMappingFn = (mapping: FormMapping) => Promise<void>
+type SaveMappingFn = (
+  mapping: FormMapping,
+  newAnswers: CustomAnswer[],
+) => Promise<void>
 
 type MapperUiOptions = {
   existing?: FormMapping | null
+  customAnswers?: CustomAnswer[]
   onSave: SaveMappingFn
 }
 
@@ -18,6 +23,8 @@ let panel: HTMLDivElement | null = null
 let selectedEl: HTMLElement | null = null
 let draft: FormMapping | null = null
 let saveFn: SaveMappingFn | null = null
+let knownAnswers: CustomAnswer[] = []
+let pendingAnswers: CustomAnswer[] = []
 
 export function isMapModeActive(): boolean {
   return active
@@ -27,6 +34,8 @@ export function startMapMode(options: MapperUiOptions): void {
   if (active) stopMapMode()
   active = true
   saveFn = options.onSave
+  knownAnswers = [...(options.customAnswers ?? [])]
+  pendingAnswers = []
 
   draft = options.existing
     ? structuredClone(options.existing)
@@ -63,6 +72,8 @@ export function stopMapMode(): void {
   selectedEl = null
   draft = null
   saveFn = null
+  knownAnswers = []
+  pendingAnswers = []
 }
 
 function defaultMappingName(): string {
@@ -126,7 +137,7 @@ function renderPanel(): void {
     .map(
       (f) => `
       <li style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;">
-        <span>${escapeHtml(f.profileKey ? PROFILE_LABELS[f.profileKey] : 'Custom')}<br>
+        <span>${escapeHtml(fieldTargetLabel(f))}<br>
           <small style="color:#64748b">${escapeHtml(f.match.label || f.match.name || f.selector || '')}</small>
         </span>
         <button type="button" data-remove="${f.id}" style="${btnStyle(true)}">Remove</button>
@@ -177,6 +188,16 @@ function renderPanel(): void {
   })
 }
 
+function fieldTargetLabel(f: FormMapping['fields'][number]): string {
+  if (f.customAnswerId) {
+    const a =
+      pendingAnswers.find((x) => x.id === f.customAnswerId) ||
+      knownAnswers.find((x) => x.id === f.customAnswerId)
+    return a ? `Custom: ${a.question}` : 'Custom answer'
+  }
+  return f.profileKey ? FILL_KEY_LABELS[f.profileKey] : '—'
+}
+
 function showFieldPicker(el: HTMLElement): void {
   if (!panel || !draft) return
   const picker = panel.querySelector('#jf-map-picker') as HTMLDivElement | null
@@ -184,43 +205,100 @@ function showFieldPicker(el: HTMLElement): void {
 
   const signals = extractSignals(el)
   const guess = matchFields([el])[0]?.fillKey
-  const options = PROFILE_KEYS.map((key) => {
+  const fieldLabel =
+    signals.label || signals.name || signals.placeholder || el.tagName.toLowerCase()
+  const keyOptions = FILL_KEYS.map((key) => {
     const selected = guess === key ? ' selected' : ''
-    return `<option value="${key}"${selected}>${escapeHtml(PROFILE_LABELS[key])}</option>`
+    return `<option value="${key}"${selected}>${escapeHtml(FILL_KEY_LABELS[key])}</option>`
   }).join('')
+  const answerOptions = [
+    `<option value="">Select…</option>`,
+    ...[...knownAnswers, ...pendingAnswers].map(
+      (a) => `<option value="${escapeAttr(a.id)}">${escapeHtml(a.question || 'Untitled')}</option>`,
+    ),
+    `<option value="__new__">New answer…</option>`,
+  ].join('')
 
   picker.style.display = 'block'
   picker.innerHTML = `
     <div style="margin-bottom:6px;font-weight:600;">Selected field</div>
     <div style="color:#475569;margin-bottom:8px;word-break:break-word;">
-      ${escapeHtml(signals.label || signals.name || signals.placeholder || el.tagName.toLowerCase())}
+      ${escapeHtml(fieldLabel)}
     </div>
-    <label style="display:block;margin-bottom:8px;">
-      <span style="display:block;margin-bottom:4px;">Map to profile field</span>
-      <select id="jf-map-key" style="${inputStyle}">${options}</select>
+    <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <input type="radio" name="jf-map-mode" value="profile" checked /> Profile field
     </label>
-    <button type="button" id="jf-map-add" style="${btnStyle()}">Add field mapping</button>
+    <select id="jf-map-key" style="${inputStyle};margin-bottom:8px;">${keyOptions}</select>
+    <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <input type="radio" name="jf-map-mode" value="custom" /> Custom answer
+    </label>
+    <select id="jf-map-answer" style="${inputStyle};margin-bottom:8px;">${answerOptions}</select>
+    <div id="jf-map-new" style="display:none;margin-bottom:8px;">
+      <input id="jf-map-q" style="${inputStyle};margin-bottom:6px;" value="${escapeAttr(fieldLabel)}" placeholder="Question" />
+      <textarea id="jf-map-a" style="${inputStyle};min-height:64px;" placeholder="Answer"></textarea>
+    </div>
+    <button type="button" id="jf-map-add" style="${btnStyle()}">Add</button>
   `
 
+  const answerSelect = picker.querySelector('#jf-map-answer') as HTMLSelectElement
+  const newBox = picker.querySelector('#jf-map-new') as HTMLDivElement
+  answerSelect.addEventListener('change', () => {
+    newBox.style.display = answerSelect.value === '__new__' ? 'block' : 'none'
+  })
+
   picker.querySelector('#jf-map-add')?.addEventListener('click', () => {
-    const key = (picker.querySelector('#jf-map-key') as HTMLSelectElement).value as ProfileKey
     if (!draft) return
-    // A field (by selector) may be mapped once; remapping replaces it.
-    // Multiple fields may share the same profile key.
+    const mode = (
+      picker.querySelector('input[name="jf-map-mode"]:checked') as HTMLInputElement
+    ).value
     const selector = buildSelector(el)
     draft.fields = draft.fields.filter((f) => f.selector !== selector)
-    draft.fields.push({
-      id: crypto.randomUUID(),
-      selector,
-      match: {
-        name: signals.name,
-        id: signals.id,
-        label: signals.label,
-        placeholder: signals.placeholder,
-        autocomplete: signals.autocomplete,
-      },
-      profileKey: key,
-    })
+    const match = {
+      name: signals.name,
+      id: signals.id,
+      label: signals.label,
+      placeholder: signals.placeholder,
+      autocomplete: signals.autocomplete,
+    }
+
+    if (mode === 'custom') {
+      let answerId = answerSelect.value
+      if (answerId === '__new__') {
+        const q = (picker.querySelector('#jf-map-q') as HTMLInputElement).value.trim()
+        const a = (picker.querySelector('#jf-map-a') as HTMLTextAreaElement).value
+        if (!q || !a.trim()) {
+          showToast('Enter a question and answer')
+          return
+        }
+        const created: CustomAnswer = {
+          id: crypto.randomUUID(),
+          question: q,
+          answer: a,
+          updatedAt: Date.now(),
+        }
+        pendingAnswers.push(created)
+        answerId = created.id
+      }
+      if (!answerId) {
+        showToast('Choose a custom answer')
+        return
+      }
+      draft.fields.push({
+        id: crypto.randomUUID(),
+        selector,
+        match,
+        customAnswerId: answerId,
+      })
+    } else {
+      const key = (picker.querySelector('#jf-map-key') as HTMLSelectElement)
+        .value as FillKey
+      draft.fields.push({
+        id: crypto.randomUUID(),
+        selector,
+        match,
+        profileKey: key,
+      })
+    }
     selectedEl = null
     clearSelectedOutline()
     picker.style.display = 'none'
@@ -240,7 +318,7 @@ async function saveDraft(): Promise<void> {
   }
   draft.updatedAt = Date.now()
   draft.pathPattern = draft.pathPattern.trim() || '/'
-  await saveFn(draft)
+  await saveFn(draft, pendingAnswers)
   stopMapMode()
   showToast('Form mapping saved')
 }

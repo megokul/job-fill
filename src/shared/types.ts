@@ -44,8 +44,8 @@ export type FieldMapping = {
   id: string
   selector?: string
   match: FieldMatchSignals
-  /** Profile key to fill — mutually exclusive with customAnswerId in practice. */
-  profileKey?: ProfileKey
+  /** Fill key — mutually exclusive with customAnswerId in practice. */
+  profileKey?: FillKey
   customAnswerId?: string
 }
 
@@ -133,6 +133,12 @@ export const PROFILE_LABELS: Record<ProfileKey, string> = {
   workAuthorized: 'Authorized to work',
   requiresSponsorship: 'Requires sponsorship',
   salaryExpectation: 'Salary expectation',
+}
+
+export const FILL_KEY_LABELS: Record<FillKey, string> = {
+  ...PROFILE_LABELS,
+  fullName: 'Full name',
+  location: 'Location (City, State)',
 }
 
 export const EMPTY_PROFILE: Profile = {

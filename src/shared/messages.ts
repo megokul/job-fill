@@ -1,8 +1,11 @@
 import type { FillKey } from './types'
 
 export type FilledField = {
+  /** Human-readable page field label. */
   label: string
-  key: FillKey
+  /** Profile label or custom-answer question. */
+  target: string
+  key?: FillKey
   source: 'mapping' | 'heuristic' | 'custom'
 }
 

@@ -313,6 +313,93 @@ describe('fill → undo round trip', () => {
     expect(anyChecked).toBe(false)
   })
 
+  it('fills a mapped custom answer into a textarea', () => {
+    mount('<label for="why">Why us?</label><textarea id="why" name="why"></textarea>')
+    fakeVisible()
+    const answerId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    const result = fillPage(
+      sampleProfile,
+      [
+        {
+          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          name: 'Test',
+          origin: location.origin,
+          pathPattern: '*',
+          updatedAt: Date.now(),
+          fields: [
+            {
+              id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+              selector: '#why',
+              match: { label: 'Why us?' },
+              customAnswerId: answerId,
+            },
+          ],
+        },
+      ],
+      { ...DEFAULT_SETTINGS, highlightFilled: false },
+      {
+        customAnswers: [
+          {
+            id: answerId,
+            question: 'Why us?',
+            answer: 'Mission fit',
+            updatedAt: 1,
+          },
+        ],
+      },
+    )
+    expect((document.getElementById('why') as HTMLTextAreaElement).value).toBe('Mission fit')
+    expect(result.filled[0]?.source).toBe('custom')
+    expect(result.filled[0]?.target).toBe('Why us?')
+  })
+
+  it('fills a mapped custom answer into a select', () => {
+    mount(`
+      <label for="hear">How did you hear?</label>
+      <select id="hear" name="hear">
+        <option value="">Select</option>
+        <option value="linkedin">LinkedIn</option>
+        <option value="friend">Friend</option>
+      </select>
+    `)
+    fakeVisible()
+    const answerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    const result = fillPage(
+      sampleProfile,
+      [
+        {
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          name: 'Test',
+          origin: location.origin,
+          pathPattern: '*',
+          updatedAt: Date.now(),
+          fields: [
+            {
+              id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              selector: '#hear',
+              match: { label: 'How did you hear?' },
+              customAnswerId: answerId,
+            },
+          ],
+        },
+      ],
+      { ...DEFAULT_SETTINGS, highlightFilled: false },
+      {
+        customAnswers: [
+          {
+            id: answerId,
+            question: 'How did you hear?',
+            answer: 'LinkedIn',
+            updatedAt: 1,
+          },
+        ],
+      },
+    )
+    expect((document.getElementById('hear') as HTMLSelectElement).value).toBe('linkedin')
+    expect(result.filled[0]?.source).toBe('custom')
+    expect(result.filled[0]?.target).toBe('How did you hear?')
+  })
+
   it('unchecks radio group after filling no then undo', () => {
     mount(`
       <fieldset>
