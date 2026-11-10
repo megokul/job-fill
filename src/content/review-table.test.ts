@@ -38,6 +38,53 @@ describe('review table — negative context (fix 1)', () => {
   })
 })
 
+describe('review table — synonym tightening (fix 2)', () => {
+  it('does not match Middle name to fullName', () => {
+    expectBest({ label: 'Middle name' }, null)
+  })
+
+  it('matches Preferred pronouns to pronouns', () => {
+    expectBest({ label: 'Preferred pronouns' }, 'pronouns')
+  })
+
+  it('does not match Preferred contact method', () => {
+    expectBest({ label: 'Preferred contact method' }, null)
+  })
+
+  it('does not match Start date to noticePeriod', () => {
+    expectBest({ label: 'Start date' }, null)
+  })
+
+  it('does not match Current salary to salaryExpectation', () => {
+    expectBest({ label: 'Current salary' }, null)
+  })
+
+  it('does not match Phone extension to phone', () => {
+    expectBest({ label: 'Phone extension' }, null)
+  })
+
+  it('does not match Phone country code to country', () => {
+    expectBest({ label: 'Phone country code' }, null)
+  })
+
+  it('does not match State your reason for leaving to state', () => {
+    expectBest({ label: 'State your reason for leaving' }, null)
+  })
+
+  it('does not match How did you find our website? to portfolioUrl', () => {
+    expectBest({ label: 'How did you find our website?' }, null)
+  })
+
+  it('does not match Job title you are applying for to currentTitle', () => {
+    expectBest({ label: 'Job title you are applying for' }, null)
+  })
+
+  it('keeps Name → fullName and City → city', () => {
+    expectBest({ label: 'Name' }, 'fullName')
+    expectBest({ label: 'City' }, 'city')
+  })
+})
+
 describe('score helpers', () => {
   it('exposes confidence threshold', () => {
     expect(CONFIDENCE_THRESHOLD).toBe(40)

@@ -1,6 +1,9 @@
 import { autocompleteToFillKey, inputTypeBoost } from '../shared/autocomplete'
 import {
+  BLOCKERS,
+  EXACT_ONLY,
   FILL_KEYS,
+  hasConsecutiveTokens,
   hasNegativeGroup,
   hasNegativeLabel,
   normalizeText,
@@ -150,27 +153,51 @@ export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
     return inputTypeBoost(signals.inputType, fillKey)
   }
 
+  const labelForBlockers = normalizeText(
+    [signals.label, signals.ariaLabel].filter(Boolean).join(' '),
+  )
+  if (isBlockedByKeyBlockers(fillKey, labelForBlockers)) {
+    return 0
+  }
+
   let best = 0
   for (const synonym of synonyms) {
     const needle = normalizeText(synonym)
     if (!needle) continue
     const needleTokens = needle.split(' ').filter(Boolean)
+    const exactOnly = EXACT_ONLY.has(needle)
 
     for (const { hay, kind } of haystacks) {
+      const isNameOrId =
+        (signals.name && hay === normalizeText(splitIdentifier(signals.name))) ||
+        (signals.id && hay === normalizeText(splitIdentifier(signals.id)))
+      // Short-label rule: single-token synonym vs label/aria/placeholder only if ≤4 tokens.
+      if (
+        needleTokens.length === 1 &&
+        !isNameOrId &&
+        fillKey !== 'workAuthorized' &&
+        fillKey !== 'requiresSponsorship'
+      ) {
+        const hayTokenCount = hay.split(' ').filter(Boolean).length
+        if (hayTokenCount > 4) continue
+      }
+
       let score = 0
       if (hay === needle) {
-        // bare "name" is exact-match only for fullName (synonym list)
         score = 100 + needle.length
+      } else if (exactOnly) {
+        score = 0
       } else if (hasConsecutiveTokens(hay, needleTokens)) {
         score = 70 + needle.length
         if (kind === 'label') score += 8
         if (kind === 'aria') score += 6
-      } else if (tokenOverlap(hay, needle) >= 0.7 && needle.length >= 4) {
+      } else if (
+        needleTokens.length === 1 &&
+        tokenOverlap(hay, needle) >= 0.7 &&
+        needle.length >= 4
+      ) {
+        // Multi-token synonyms require consecutive whole tokens; overlap is for single tokens only.
         score = 45 + needle.length / 2
-      }
-
-      if (fillKey === 'addressLine1' && /line 2|address 2|apt|suite|unit/.test(hay)) {
-        score = 0
       }
 
       best = Math.max(best, score)
@@ -249,21 +276,13 @@ function isBlockedByNegativeContext(key: FillKey, signals: FieldSignals): boolea
   return negLabel || negGroup
 }
 
-function hasConsecutiveTokens(hay: string, needleTokens: string[]): boolean {
-  if (needleTokens.length === 0) return false
-  const hayTokens = hay.split(' ').filter(Boolean)
-  if (needleTokens.length > hayTokens.length) return false
-  for (let i = 0; i <= hayTokens.length - needleTokens.length; i++) {
-    let ok = true
-    for (let j = 0; j < needleTokens.length; j++) {
-      if (hayTokens[i + j] !== needleTokens[j]) {
-        ok = false
-        break
-      }
-    }
-    if (ok) return true
-  }
-  return false
+function isBlockedByKeyBlockers(key: FillKey, labelText: string): boolean {
+  const blockers = BLOCKERS[key]
+  if (!blockers || !labelText) return false
+  return blockers.some((phrase) => {
+    const tokens = normalizeText(phrase).split(' ').filter(Boolean)
+    return hasConsecutiveTokens(labelText, tokens)
+  })
 }
 
 function tokenOverlap(a: string, b: string): number {

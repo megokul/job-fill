@@ -50,6 +50,18 @@ export const NEGATIVE_GROUP = [
 /** @deprecated use NEGATIVE_LABEL / NEGATIVE_GROUP */
 export const NEGATIVE_CONTEXT = NEGATIVE_LABEL
 
+/** Synonyms that only match when the whole haystack equals the phrase. */
+export const EXACT_ONLY = new Set<string>(['name'])
+
+/** If any phrase appears as whole consecutive tokens in the label, that key scores 0. */
+export const BLOCKERS: Partial<Record<FillKey, string[]>> = {
+  phone: ['extension', 'ext', 'type', 'country code', 'dial code'],
+  country: ['country code', 'dial code', 'phone'],
+  salaryExpectation: ['current', 'previous', 'last'],
+  currentTitle: ['applying', 'applied', 'desired'],
+  addressLine1: ['line 2', 'address 2', 'apt', 'suite', 'unit'],
+}
+
 /** Lowercased synonym phrases mapped to fill keys. */
 export const SYNONYMS: Record<FillKey, string[]> = {
   firstName: [
@@ -70,8 +82,8 @@ export const SYNONYMS: Record<FillKey, string[]> = {
     'lastname',
     'legal last name',
   ],
-  preferredName: ['preferred name', 'preferred', 'nickname', 'goes by'],
-  pronouns: ['pronouns', 'personal pronouns'],
+  preferredName: ['preferred name', 'nickname', 'goes by'],
+  pronouns: ['preferred pronouns', 'pronouns', 'personal pronouns'],
   fullName: ['full name', 'your name', 'legal name', 'name'],
   location: ['current location', 'city state', 'location'],
   email: ['email address', 'e-mail', 'email', 'work email', 'contact email'],
@@ -130,8 +142,8 @@ export const SYNONYMS: Record<FillKey, string[]> = {
     'current title',
     'present title',
     'current role',
-    'job title',
-    'title',
+    'current job title',
+    'current position',
   ],
   yearsExperience: [
     'years of experience',
@@ -139,7 +151,12 @@ export const SYNONYMS: Record<FillKey, string[]> = {
     'total experience',
     'experience years',
   ],
-  noticePeriod: ['notice period', 'availability', 'when can you start', 'start date'],
+  noticePeriod: [
+    'notice period',
+    'when can you start',
+    'earliest start date',
+    'available start date',
+  ],
   howDidYouHear: [
     'how did you hear about this opportunity',
     'how did you hear about us',
@@ -171,9 +188,24 @@ export const SYNONYMS: Record<FillKey, string[]> = {
     'salary requirements',
     'expected compensation',
     'pay expectation',
-    'salary',
-    'compensation',
   ],
+}
+
+export function hasConsecutiveTokens(hay: string, needleTokens: string[]): boolean {
+  if (needleTokens.length === 0) return false
+  const hayTokens = hay.split(' ').filter(Boolean)
+  if (needleTokens.length > hayTokens.length) return false
+  for (let i = 0; i <= hayTokens.length - needleTokens.length; i++) {
+    let ok = true
+    for (let j = 0; j < needleTokens.length; j++) {
+      if (hayTokens[i + j] !== needleTokens[j]) {
+        ok = false
+        break
+      }
+    }
+    if (ok) return true
+  }
+  return false
 }
 
 export const FILL_KEYS = Object.keys(SYNONYMS) as FillKey[]
