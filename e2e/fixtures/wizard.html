@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wizard application</title>
+  </head>
+  <body>
+    <h1>Multi-step apply</h1>
+    <div id="step"></div>
+    <script>
+      const stepRoot = document.getElementById('step')
+
+      function renderStep1() {
+        stepRoot.innerHTML = `
+          <form id="step1">
+            <label>First name <input id="first" name="first_name" autocomplete="given-name" /></label>
+            <label>Email <input id="email" name="email" type="email" autocomplete="email" /></label>
+            <button type="button" id="next">Next</button>
+          </form>
+        `
+        document.getElementById('next').addEventListener('click', () => {
+          history.pushState({ step: 2 }, '', '/wizard.html?step=2')
+          renderStep2()
+        })
+      }
+
+      function renderStep2() {
+        stepRoot.innerHTML = `
+          <form id="step2">
+            <label>Address line 1 <input id="addr1" name="address1" autocomplete="address-line1" /></label>
+            <label>City <input id="city" name="city" autocomplete="address-level2" /></label>
+            <button type="button" id="more">Add references</button>
+          </form>
+        `
+        document.getElementById('more').addEventListener('click', () => {
+          history.pushState({ step: 3 }, '', '/wizard.html?step=3')
+          stepRoot.innerHTML += `
+            <label>Reference name <input id="ref-name" name="ref_name" /></label>
+          `
+        })
+      }
+
+      if (location.search.includes('step=2')) renderStep2()
+      else renderStep1()
+
+      window.addEventListener('popstate', () => {
+        if (location.search.includes('step=2')) renderStep2()
+        else renderStep1()
+      })
+    </script>
+  </body>
+</html>
