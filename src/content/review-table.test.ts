@@ -1,10 +1,46 @@
-import { describe, expect, it } from 'vitest'
-import { CONFIDENCE_THRESHOLD, bestFillKey, scoreField } from './matcher'
+/** @vitest-environment happy-dom */
+import { beforeEach, describe, expect, it } from 'vitest'
+import { DEFAULT_SETTINGS, EMPTY_PROFILE, type FillKey } from '../shared/types'
+import { fillPage } from './filler'
+import {
+  CONFIDENCE_THRESHOLD,
+  bestFillKey,
+  extractSignals,
+  scoreField,
+} from './matcher'
 import type { FieldSignals } from './matcher'
-import type { FillKey } from '../shared/types'
 
 function expectBest(signals: FieldSignals, expected: FillKey | null): void {
   expect(bestFillKey(signals)).toBe(expected)
+}
+
+function mount(html: string): void {
+  document.body.innerHTML = html
+}
+
+beforeEach(() => {
+  document.body.innerHTML = ''
+})
+
+function fakeVisible(): void {
+  for (const el of document.querySelectorAll('input,textarea,select')) {
+    Object.defineProperty(el, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        width: 100,
+        height: 20,
+        top: 0,
+        left: 0,
+        bottom: 20,
+        right: 100,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {}
+        },
+      }),
+    })
+  }
 }
 
 describe('review table — negative context (fix 1)', () => {
@@ -59,6 +95,25 @@ describe('review table — synonym tightening (fix 2)', () => {
     expectBest({ label: 'Current salary' }, null)
   })
 
+  it('matches common salary expectation phrasings', () => {
+    expectBest({ label: 'Salary expectations' }, 'salaryExpectation')
+    expectBest({ label: 'Salary' }, 'salaryExpectation')
+    expectBest({ label: 'Desired compensation' }, 'salaryExpectation')
+    expectBest({ label: 'Compensation expectations' }, 'salaryExpectation')
+    expectBest({ label: 'Expected annual salary' }, 'salaryExpectation')
+    expectBest(
+      { label: 'What are your salary expectations?' },
+      'salaryExpectation',
+    )
+    expectBest({ label: 'What is your desired salary?' }, 'salaryExpectation')
+  })
+
+  it('still blocks current/history salary labels', () => {
+    expectBest({ label: 'Current salary' }, null)
+    expectBest({ label: 'What is your current salary?' }, null)
+    expectBest({ label: 'Salary history' }, null)
+  })
+
   it('does not match Phone extension to phone', () => {
     expectBest({ label: 'Phone extension' }, null)
   })
@@ -91,5 +146,44 @@ describe('score helpers', () => {
     expect(scoreField({ label: 'Email' }, 'email')).toBeGreaterThanOrEqual(
       CONFIDENCE_THRESHOLD,
     )
+  })
+})
+
+describe('review table — wrapped label own text (fix 1)', () => {
+  it('strips select options from a wrapping label', () => {
+    mount(`
+      <label>Country
+        <select id="c">
+          <option value="">Select...</option>
+          <option value="14">Australia</option>
+          <option value="231">United States of America</option>
+        </select>
+      </label>
+    `)
+    fakeVisible()
+    const select = document.getElementById('c') as HTMLSelectElement
+    expect(extractSignals(select).label).toBe('Country')
+    const result = fillPage(
+      { ...EMPTY_PROFILE, country: 'United States' },
+      [],
+      { ...DEFAULT_SETTINGS, highlightFilled: false },
+    )
+    expect(select.value).toBe('231')
+    expect(result.filled.some((f) => f.key === 'country')).toBe(true)
+  })
+
+  it('keeps Email for a wrapped text input', () => {
+    mount('<label>Email <input id="e" type="email"></label>')
+    const input = document.getElementById('e') as HTMLInputElement
+    expect(extractSignals(input).label).toBe('Email')
+  })
+
+  it('dedupes wrapping label and label[for]', () => {
+    mount(`
+      <label for="c">Country</label>
+      <label>Country <select id="c"><option value="">Select...</option></select></label>
+    `)
+    const select = document.getElementById('c') as HTMLSelectElement
+    expect(extractSignals(select).label).toBe('Country')
   })
 })

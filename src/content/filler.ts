@@ -15,6 +15,7 @@ import {
   collectFillableElements,
   extractSignals,
   getRadioGroupMembers,
+  labelOwnText,
   matchFields,
   type FieldSignals,
 } from './matcher'
@@ -339,10 +340,16 @@ export { getRadioGroupMembers }
 function optionLabel(r: HTMLInputElement): string {
   if (r.id) {
     const lab = document.querySelector(`label[for="${cssEscape(r.id)}"]`)
-    if (lab?.textContent) return lab.textContent.trim()
+    if (lab) {
+      const text = labelOwnText(lab)
+      if (text) return text
+    }
   }
   const wrap = r.closest('label')
-  if (wrap?.textContent) return wrap.textContent.trim()
+  if (wrap) {
+    const text = labelOwnText(wrap)
+    if (text) return text
+  }
   return r.value
 }
 

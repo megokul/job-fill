@@ -380,33 +380,62 @@ function rootDocument(el: Element): Document | DocumentFragment | ShadowRoot {
   return document
 }
 
+/** Label text without nested control / option text. */
+export function labelOwnText(label: Element): string {
+  const clone = label.cloneNode(true) as Element
+  clone
+    .querySelectorAll('select, input, textarea, button, datalist, option')
+    .forEach((n) => n.remove())
+  return (clone.textContent ?? '').replace(/\s+/g, ' ').trim()
+}
+
 function getAssociatedLabelText(el: HTMLElement): string {
   const parts: string[] = []
   const root = rootDocument(el)
 
   if (el.id) {
     const byFor = root.querySelectorAll(`label[for="${cssEscape(el.id)}"]`)
-    byFor.forEach((label) => parts.push(label.textContent ?? ''))
+    byFor.forEach((label) => {
+      const text = labelOwnText(label)
+      if (text) parts.push(text)
+    })
   }
 
   const wrapping = el.closest('label')
-  if (wrapping) parts.push(wrapping.textContent ?? '')
+  if (wrapping) {
+    const text = labelOwnText(wrapping)
+    if (text) parts.push(text)
+  }
 
   const labelledBy = el.getAttribute('aria-labelledby')
   if (labelledBy) {
     for (const id of labelledBy.split(/\s+/)) {
       const ref = root.querySelector(`#${cssEscape(id)}`)
-      if (ref) parts.push(ref.textContent ?? '')
+      if (ref) {
+        const text = (ref.textContent ?? '').replace(/\s+/g, ' ').trim()
+        if (text) parts.push(text)
+      }
     }
   }
 
   const prev = el.previousElementSibling
   if (prev && (prev.tagName === 'LABEL' || prev.tagName === 'SPAN' || prev.tagName === 'DIV')) {
-    const text = (prev.textContent ?? '').trim()
+    const text =
+      prev.tagName === 'LABEL'
+        ? labelOwnText(prev)
+        : (prev.textContent ?? '').replace(/\s+/g, ' ').trim()
     if (text.length > 0 && text.length < 80) parts.push(text)
   }
 
-  return parts.join(' ').replace(/\s+/g, ' ').trim()
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const part of parts) {
+    const key = part.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(part)
+  }
+  return unique.join(' ').replace(/\s+/g, ' ').trim()
 }
 
 function isVisible(el: HTMLElement): boolean {
