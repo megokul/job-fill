@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Closed combobox no match</title>
+  </head>
+  <body>
+    <label for="country">Country</label>
+    <input
+      id="country"
+      role="combobox"
+      aria-controls="country-list"
+      aria-autocomplete="list"
+    />
+    <div id="country-list" role="listbox" hidden></div>
+    <script>
+      const input = document.getElementById('country')
+      const list = document.getElementById('country-list')
+      input.addEventListener('input', () => {
+        list.hidden = false
+        list.innerHTML =
+          '<div role="option">Australia</div><div role="option">Canada</div>'
+      })
+    </script>
+  </body>
+</html>

@@ -42,8 +42,29 @@ async function applyValue(
   isCustomAnswer: boolean,
 ): Promise<boolean> {
   if (isComboboxControl(el)) {
-    if (!canFillAsCombobox(el, fillKey, isCustomAnswer)) return false
-    return fillCombobox(el, value, fillKey)
+    if (canFillAsCombobox(el, fillKey, isCustomAnswer)) {
+      return fillCombobox(el, value, fillKey)
+    }
+    // Address-style autocomplete widgets mark inputs as comboboxes but take
+    // free text. Fill as plain text and Escape any suggestion popup.
+    // Button-style comboboxes with open keys stay skipped.
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      const ok = setControlValue(el, value, fillKey)
+      if (ok) {
+        el.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Escape',
+            code: 'Escape',
+            keyCode: 27,
+            which: 27,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      }
+      return ok
+    }
+    return false
   }
   return setControlValue(el, value, fillKey)
 }
