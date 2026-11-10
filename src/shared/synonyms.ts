@@ -1,4 +1,4 @@
-import type { FillKey, ProfileKey } from './types'
+import type { FillKey } from './types'
 
 /** Personal keys blocked by NEGATIVE_LABEL / NEGATIVE_GROUP. */
 export const PERSONAL_KEYS = new Set<FillKey>([
@@ -248,8 +248,4 @@ function hasNegativeTokens(
 /** @deprecated */
 export function hasNegativeContext(...parts: Array<string | undefined>): boolean {
   return hasNegativeLabel(...parts) || hasNegativeGroup(...parts)
-}
-
-export function isProfileKey(key: string): key is ProfileKey {
-  return key in SYNONYMS && key !== 'fullName' && key !== 'location'
 }

@@ -25,9 +25,6 @@ export type MatchCandidate = {
   score: number
 }
 
-/** @deprecated use fillKey */
-export type MatchCandidateLegacy = MatchCandidate & { profileKey: FillKey }
-
 const SKIP_TYPES = new Set([
   'password',
   'file',
@@ -335,9 +332,10 @@ function getRadioGroupQuestion(el: HTMLInputElement): string {
   if (group) {
     const labelledBy = group.getAttribute('aria-labelledby')
     if (labelledBy) {
+      const root = rootDocument(group)
       const parts = labelledBy
         .split(/\s+/)
-        .map((id) => document.getElementById(id)?.textContent ?? '')
+        .map((id) => root.querySelector(`#${cssEscape(id)}`)?.textContent ?? '')
       const text = parts.join(' ').replace(/\s+/g, ' ').trim()
       if (text) return text
     }
@@ -376,11 +374,18 @@ function getGroupContext(el: HTMLElement): string {
   return ''
 }
 
+function rootDocument(el: Element): Document | DocumentFragment | ShadowRoot {
+  const root = el.getRootNode()
+  if (root instanceof Document || root instanceof ShadowRoot) return root
+  return document
+}
+
 function getAssociatedLabelText(el: HTMLElement): string {
   const parts: string[] = []
+  const root = rootDocument(el)
 
   if (el.id) {
-    const byFor = document.querySelectorAll(`label[for="${cssEscape(el.id)}"]`)
+    const byFor = root.querySelectorAll(`label[for="${cssEscape(el.id)}"]`)
     byFor.forEach((label) => parts.push(label.textContent ?? ''))
   }
 
@@ -390,7 +395,7 @@ function getAssociatedLabelText(el: HTMLElement): string {
   const labelledBy = el.getAttribute('aria-labelledby')
   if (labelledBy) {
     for (const id of labelledBy.split(/\s+/)) {
-      const ref = document.getElementById(id)
+      const ref = root.querySelector(`#${cssEscape(id)}`)
       if (ref) parts.push(ref.textContent ?? '')
     }
   }

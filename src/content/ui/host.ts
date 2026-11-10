@@ -93,7 +93,7 @@ function scheduleToastHide(ms: number): void {
   }, ms)
 }
 
-export function hideHostToast(): void {
+function hideHostToast(): void {
   clearToastHideTimer()
   toastPaused = false
   const root = shadow

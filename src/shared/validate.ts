@@ -264,6 +264,3 @@ function parseCustomAnswers(raw: unknown, errors: string[]): CustomAnswer[] {
   return out
 }
 
-export function isUuid(value: string): boolean {
-  return UUID_RE.test(value)
-}

@@ -1,6 +1,5 @@
 import {
   CURRENT_SCHEMA_VERSION,
-  DEFAULT_SETTINGS,
   EMPTY_PROFILE,
   REQUIRED_PROFILE_KEYS,
   type CustomAnswer,
@@ -27,16 +26,6 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
     () => undefined,
   )
   return run
-}
-
-export function createDefaultStore(): Store {
-  return {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    profile: { ...EMPTY_PROFILE },
-    formMappings: [],
-    settings: { ...DEFAULT_SETTINGS },
-    customAnswers: [],
-  }
 }
 
 export async function getStore(): Promise<Store> {

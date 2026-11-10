@@ -321,7 +321,12 @@ function resultCard(
               h(
                 'li',
                 null,
-                h('span', null, f.target || f.label),
+                h(
+                  'span',
+                  null,
+                  f.label || 'Untitled field',
+                  f.target ? ` → ${f.target}` : '',
+                ),
                 h('span', { className: 'hint' }, f.source),
               ),
             ),
