@@ -1,4 +1,5 @@
 import type { FillResult, ToastSummary } from '../shared/messages'
+import { mergeCustomAnswersForMapping } from '../shared/mergeCustomAnswers'
 import { mappingsForUrl } from '../shared/pathMatch'
 import { getStore, saveCustomAnswers, saveFormMapping } from '../shared/storage'
 import type { FormMapping } from '../shared/types'
@@ -125,7 +126,13 @@ async function runStartMapMode(): Promise<{ ok: true }> {
     customAnswers: store.customAnswers,
     onSave: async (mapping: FormMapping, newAnswers) => {
       if (newAnswers.length) {
-        await saveCustomAnswers([...store.customAnswers, ...newAnswers])
+        const fresh = await getStore()
+        const merged = mergeCustomAnswersForMapping({
+          current: fresh.customAnswers,
+          pending: newAnswers,
+          fields: mapping.fields,
+        })
+        await saveCustomAnswers(merged)
       }
       await saveFormMapping(mapping)
     },
