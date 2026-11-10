@@ -42,6 +42,18 @@ const CONFIDENCE_THRESHOLD = 40
 
 export type VisibilityFn = (el: HTMLElement) => boolean
 
+export function isComboboxControl(el: HTMLElement): boolean {
+  if (el instanceof HTMLInputElement) {
+    const type = (el.type || 'text').toLowerCase()
+    if (type === 'hidden' || SKIP_TYPES.has(type)) return false
+    if (el.getAttribute('role') === 'combobox') return true
+    return Boolean(el.closest('[role="combobox"]'))
+  }
+  const tag = el.tagName.toLowerCase()
+  if (tag !== 'button' && tag !== 'div') return false
+  return el.getAttribute('aria-haspopup') === 'listbox'
+}
+
 export function collectFillableElements(
   root: ParentNode = document,
   options?: { isVisible?: VisibilityFn },
@@ -69,6 +81,18 @@ export function collectFillableElements(
     if (!visible(el)) continue
     result.push(el)
   }
+
+  const popupHosts = queryAllDeep(
+    root,
+    'button[aria-haspopup="listbox"], div[aria-haspopup="listbox"]',
+  )
+  for (const el of popupHosts) {
+    if (el instanceof HTMLButtonElement && el.disabled) continue
+    if (!visible(el)) continue
+    if (result.some((existing) => el.contains(existing))) continue
+    result.push(el)
+  }
+
   return result
 }
 
