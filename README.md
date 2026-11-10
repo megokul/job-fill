@@ -59,6 +59,10 @@ npm run build
 | `npm run lint` | ESLint |
 | `npm run check` | `tsc` + ESLint + tests |
 
+## Known limits
+
+- In-page navigation and later steps of multi-step forms are not refilled automatically after the initial autofill-on-load window.
+
 ## Privacy
 
 - Data stays in `chrome.storage.local`

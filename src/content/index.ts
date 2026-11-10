@@ -20,8 +20,8 @@ let userTyped = false
 
 document.addEventListener(
   'input',
-  () => {
-    userTyped = true
+  (event) => {
+    if (event.isTrusted) userTyped = true
   },
   true,
 )
@@ -73,8 +73,8 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
       return
     }
 
-    if (collectFillableElements().length > 0) return
-
+    // Watch for late-rendered fields even when the page already has
+    // fillable controls that did not match on the first attempt.
     const started = Date.now()
     let timer: number | undefined
     const observer = new MutationObserver(() => {
