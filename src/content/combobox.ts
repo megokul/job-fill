@@ -165,30 +165,22 @@ function dispatchEscape(el: HTMLElement): void {
   el.dispatchEvent(new KeyboardEvent('keyup', opts))
 }
 
-function hideOwnedListboxes(el: HTMLElement): void {
-  const hosts: HTMLElement[] = [el]
-  const combo = el.closest('[role="combobox"]')
-  if (combo instanceof HTMLElement) hosts.push(combo)
-  for (const host of hosts) {
-    const refs = [host.getAttribute('aria-controls'), host.getAttribute('aria-owns')]
-      .filter((v): v is string => Boolean(v))
-      .flatMap((v) => v.split(/\s+/).filter(Boolean))
-    for (const id of refs) {
-      const node = host.ownerDocument.getElementById(id)
-      if (!node) continue
-      node.setAttribute('hidden', '')
-      ;(node as HTMLElement).style.display = 'none'
-      node.querySelectorAll('[role="option"]').forEach((opt) => opt.remove())
-    }
-  }
-}
-
+/**
+ * Close a scripted dropdown without mutating the site's option nodes.
+ * Escape + outside click + blur; if the list stays open, leave it alone.
+ */
 function restoreAndClose(el: HTMLElement, originalText: string): void {
   if (el instanceof HTMLInputElement) {
     setInputText(el, originalText, true)
   }
   dispatchEscape(el)
-  hideOwnedListboxes(el)
+  const body = el.ownerDocument.body
+  body.dispatchEvent(
+    new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }),
+  )
+  body.dispatchEvent(
+    new MouseEvent('click', { bubbles: true, cancelable: true, view: window }),
+  )
   el.dispatchEvent(new Event('blur', { bubbles: true }))
   if (typeof el.blur === 'function') el.blur()
 }

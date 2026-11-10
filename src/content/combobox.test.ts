@@ -125,7 +125,31 @@ describe('fillCombobox', () => {
     expect(ok).toBe(false)
     expect(input.value).toBe('')
     expect(document.getElementById('loc-list')?.hidden).toBe(true)
-    expect(document.querySelectorAll('[role="option"]')).toHaveLength(0)
+    // Fixture closes via Escape; extension must not strip option nodes itself.
+    expect(document.getElementById('loc-list')!.style.display).toBe('')
+  })
+
+  it('leaves static option nodes untouched after a failed match', async () => {
+    document.body.innerHTML = `
+      <label for="country">Country</label>
+      <input id="country" role="combobox" aria-controls="country-list" value="" />
+      <div id="country-list" role="listbox">
+        <div role="option">United States</div>
+        <div role="option">Canada</div>
+        <div role="option">Australia</div>
+      </div>
+    `
+    const input = document.getElementById('country') as HTMLInputElement
+    const ok = await fillCombobox(input, 'Fiji', 'country')
+    expect(ok).toBe(false)
+    const list = document.getElementById('country-list')!
+    expect(list.querySelectorAll('[role="option"]')).toHaveLength(3)
+    expect(list.hasAttribute('hidden')).toBe(false)
+    expect(list.style.display).toBe('')
+    for (const opt of Array.from(list.querySelectorAll('[role="option"]'))) {
+      expect(opt.hasAttribute('hidden')).toBe(false)
+      expect((opt as HTMLElement).style.display).toBe('')
+    }
   })
 
   it('fills a button-style listbox for yes/no', async () => {
