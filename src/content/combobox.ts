@@ -60,12 +60,15 @@ function setInputText(el: HTMLInputElement, value: string, blur: boolean): void 
   }
 }
 
-function optionsFromAriaRefs(el: HTMLElement): HTMLElement[] {
+function comboboxHosts(el: HTMLElement): HTMLElement[] {
   const hosts: HTMLElement[] = [el]
   const combo = el.closest('[role="combobox"]')
   if (combo instanceof HTMLElement && combo !== el) hosts.push(combo)
+  return hosts
+}
 
-  for (const host of hosts) {
+function optionsFromAriaRefs(el: HTMLElement): HTMLElement[] {
+  for (const host of comboboxHosts(el)) {
     const refs = [host.getAttribute('aria-controls'), host.getAttribute('aria-owns')]
       .filter((v): v is string => Boolean(v))
       .flatMap((v) => v.split(/\s+/).filter(Boolean))
@@ -81,22 +84,69 @@ function optionsFromAriaRefs(el: HTMLElement): HTMLElement[] {
   return []
 }
 
+function optionsFromActiveDescendant(el: HTMLElement): HTMLElement[] {
+  for (const host of comboboxHosts(el)) {
+    const id = host.getAttribute('aria-activedescendant')
+    if (!id) continue
+    const active = host.ownerDocument.getElementById(id)
+    if (!active) continue
+    const listbox = active.closest('[role="listbox"]')
+    if (!listbox) continue
+    const opts = Array.from(
+      listbox.querySelectorAll<HTMLElement>('[role="option"]'),
+    )
+    if (opts.length > 0) return opts
+  }
+  return []
+}
+
+/** Listboxes that already expose options before the control is opened. */
+export function listboxesWithVisibleOptions(doc: ParentNode = document): Set<Element> {
+  const out = new Set<Element>()
+  for (const listbox of Array.from(doc.querySelectorAll('[role="listbox"]'))) {
+    if ((listbox as HTMLElement).hidden) continue
+    const opts = listbox.querySelectorAll('[role="option"]')
+    if (opts.length === 0) continue
+    out.add(listbox)
+  }
+  return out
+}
+
+/**
+ * Discover options only from aria-controls/owns, aria-activedescendant's
+ * listbox, or a listbox that gained visible options after open.
+ */
+export function discoverComboboxOptions(
+  el: HTMLElement,
+  preexistingListboxes: Set<Element>,
+): HTMLElement[] {
+  const fromAria = optionsFromAriaRefs(el)
+  if (fromAria.length > 0) return fromAria
+
+  const fromActive = optionsFromActiveDescendant(el)
+  if (fromActive.length > 0) return fromActive
+
+  const doc = el.ownerDocument
+  for (const listbox of Array.from(doc.querySelectorAll('[role="listbox"]'))) {
+    if (preexistingListboxes.has(listbox)) continue
+    if ((listbox as HTMLElement).hidden) continue
+    const opts = Array.from(
+      listbox.querySelectorAll<HTMLElement>('[role="option"]'),
+    )
+    if (opts.length > 0) return opts
+  }
+  return []
+}
+
 async function waitForOptions(
   el: HTMLElement,
   timeoutMs: number,
+  preexistingListboxes: Set<Element>,
 ): Promise<HTMLElement[]> {
-  const doc = el.ownerDocument
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const fromAria = optionsFromAriaRefs(el)
-    if (fromAria.length > 0) return fromAria
-
-    for (const listbox of Array.from(doc.querySelectorAll('[role="listbox"]'))) {
-      const opts = Array.from(
-        listbox.querySelectorAll<HTMLElement>('[role="option"]'),
-      )
-      if (opts.length > 0) return opts
-    }
+    const found = discoverComboboxOptions(el, preexistingListboxes)
+    if (found.length > 0) return found
     await sleep(40)
   }
   return []
@@ -186,6 +236,8 @@ export async function fillCombobox(
   const originalText =
     el instanceof HTMLInputElement ? el.value : comboboxDisplayText(el)
 
+  const preexistingListboxes = listboxesWithVisibleOptions(el.ownerDocument)
+
   // Open: click the control first (react-select opens on mouse down/focus),
   // then type the filter text into input comboboxes.
   el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
@@ -197,7 +249,7 @@ export async function fillCombobox(
     setInputText(el, filterTextForCombobox(value, fillKey), false)
   }
 
-  const optionEls = await waitForOptions(el, 1500)
+  const optionEls = await waitForOptions(el, 1500, preexistingListboxes)
   if (optionEls.length === 0) {
     restoreAndClose(el, originalText)
     return false

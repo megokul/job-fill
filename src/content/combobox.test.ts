@@ -1,7 +1,11 @@
 /** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, EMPTY_PROFILE } from '../shared/types'
-import { fillCombobox } from './combobox'
+import {
+  discoverComboboxOptions,
+  fillCombobox,
+  listboxesWithVisibleOptions,
+} from './combobox'
 import { fillPage } from './filler'
 import {
   beginUndoSnapshot,
@@ -83,6 +87,29 @@ beforeEach(() => {
 })
 
 describe('fillCombobox', () => {
+  it('does not click options in a pre-existing unrelated listbox', async () => {
+    document.body.innerHTML = `
+      <ul role="listbox" id="lang">
+        <li role="option">Yes</li>
+        <li role="option">No</li>
+      </ul>
+      <label for="wa">Work authorized</label>
+      <input id="wa" role="combobox" value="" />
+    `
+    let clicks = 0
+    document.getElementById('lang')!.addEventListener('click', () => {
+      clicks += 1
+    })
+    const input = document.getElementById('wa') as HTMLInputElement
+    const preexisting = listboxesWithVisibleOptions(document)
+    expect(preexisting.has(document.getElementById('lang')!)).toBe(true)
+    expect(discoverComboboxOptions(input, preexisting)).toHaveLength(0)
+    const ok = await fillCombobox(input, 'yes', 'workAuthorized')
+    expect(ok).toBe(false)
+    expect(clicks).toBe(0)
+    expect(input.value).toBe('')
+  })
+
   it('selects a type-ahead option and leaves the chosen text', async () => {
     const input = mountTypeahead()
     const ok = await fillCombobox(input, 'San Francisco, CA', 'location')
