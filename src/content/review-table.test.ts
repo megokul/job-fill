@@ -149,6 +149,23 @@ describe('score helpers', () => {
   })
 })
 
+describe('review table — identifier haystacks (fix 3)', () => {
+  it('matches urls[LinkedIn] / urls[GitHub] / urls[Portfolio] by name', () => {
+    expectBest({ name: 'urls[LinkedIn]' }, 'linkedinUrl')
+    expectBest({ name: 'urls[GitHub]' }, 'githubUrl')
+    expectBest({ name: 'urls[Portfolio]' }, 'portfolioUrl')
+  })
+
+  it('keeps camelCase and address2 name matches', () => {
+    expectBest({ name: 'firstName' }, 'firstName')
+    expectBest({ name: 'address2' }, 'addressLine2')
+  })
+
+  it('does not match opaque question ids', () => {
+    expectBest({ name: 'question_12345' }, null)
+  })
+})
+
 describe('review table — wrapped label own text (fix 1)', () => {
   it('strips select options from a wrapping label', () => {
     mount(`

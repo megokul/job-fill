@@ -57,7 +57,7 @@ export const EXACT_ONLY = new Set<string>(['name'])
 export const BLOCKERS: Partial<Record<FillKey, string[]>> = {
   phone: ['extension', 'ext', 'type', 'country code', 'dial code'],
   country: ['country code', 'dial code', 'phone'],
-  salaryExpectation: ['current', 'previous', 'last'],
+  salaryExpectation: ['current', 'previous', 'last', 'history'],
   currentTitle: ['applying', 'applied', 'desired'],
   addressLine1: ['line 2', 'address 2', 'apt', 'suite', 'unit'],
 }
@@ -181,13 +181,19 @@ export const SYNONYMS: Record<FillKey, string[]> = {
     'work visa',
   ],
   salaryExpectation: [
+    'salary expectations',
     'salary expectation',
+    'compensation expectations',
+    'compensation expectation',
+    'desired compensation',
     'expected salary',
     'desired salary',
-    'compensation expectation',
     'salary requirements',
     'expected compensation',
+    'salary range',
     'pay expectation',
+    'salary',
+    'compensation',
   ],
 }
 
