@@ -59,6 +59,12 @@ npm run build
 | `npm run lint` | ESLint |
 | `npm run check` | `tsc` + ESLint + tests |
 
+## Scope
+
+- English-language forms only.
+- State and province lists cover the United States and Canada.
+- Resume upload and other file fields are never touched.
+
 ## Known limits
 
 - Undo restores typed text on scripted dropdowns (comboboxes) best-effort; it may not clear a widget’s internal selection if the control keeps state outside the DOM value.
