@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Fill — Profile</title>
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Job Fill</p>
+          <h1>Your application profile</h1>
+          <p class="lede">
+            Stored only in this browser via <code>chrome.storage.local</code>. Do not save SSNs or government IDs here.
+          </p>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Profile</h2>
+          <p>Basics used by heuristic fill and manual mappings.</p>
+        </div>
+        <form id="profile-form" class="grid"></form>
+        <div class="row-actions">
+          <button id="save-profile" type="button" class="btn primary">Save profile</button>
+          <button id="reset-profile" type="button" class="btn">Reset</button>
+          <span id="profile-status" class="status" aria-live="polite"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Settings</h2>
+          <p>Fill behavior on application pages.</p>
+        </div>
+        <label class="check">
+          <input id="autofill-on-load" type="checkbox" />
+          Autofill when a page loads (off by default)
+        </label>
+        <label class="check">
+          <input id="highlight-filled" type="checkbox" checked />
+          Highlight fields after filling
+        </label>
+        <div class="row-actions">
+          <button id="save-settings" type="button" class="btn primary">Save settings</button>
+          <span id="settings-status" class="status" aria-live="polite"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Saved form mappings</h2>
+          <p>Manual field bindings taught via “Map this form”. Used before heuristic matching.</p>
+        </div>
+        <div id="mappings-list" class="mappings"></div>
+        <div class="row-actions">
+          <button id="export-btn" type="button" class="btn">Export JSON</button>
+          <label class="btn file-btn">
+            Import JSON
+            <input id="import-input" type="file" accept="application/json,.json" hidden />
+          </label>
+          <span id="mappings-status" class="status" aria-live="polite"></span>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
