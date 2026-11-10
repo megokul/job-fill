@@ -59,14 +59,15 @@ export async function getStore(): Promise<Store> {
     raw.schemaVersion !== CURRENT_SCHEMA_VERSION
 
   if (needsPersist) {
+    // Only persist migrated settings/version. Never rewrite profile or
+    // customAnswers here — a concurrent writer (e.g. first-run Options
+    // open racing an import/seed) must not be clobbered with EMPTY_PROFILE.
     await chrome.storage.local.set({
       settings: {
         autofillSites: store.settings.autofillSites,
         highlightFilled: store.settings.highlightFilled,
       },
       schemaVersion: CURRENT_SCHEMA_VERSION,
-      customAnswers: store.customAnswers,
-      profile: store.profile,
     })
   }
 

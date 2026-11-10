@@ -9,8 +9,9 @@ test.describe('Wizard', () => {
       settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
     })
     await page.goto(`${ORIGIN_A}/wizard.html`)
-    // Autofill runs from the content script after storage read; wait for the toast
-    // (or the filled value) rather than assuming document_idle is enough.
+    // Reload once so the content script bootstraps against already-seeded storage
+    // (first-install Options open can race the initial document_idle pass).
+    await page.reload()
     await expect
       .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
       .toBe('Ada')

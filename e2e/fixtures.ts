@@ -68,6 +68,23 @@ export const test = base.extend<Fixtures>({
         await chrome.storage.local.clear()
         await chrome.storage.local.set(payload)
       }, store)
+      // Confirm the seed stuck (first-run Options getStore used to rewrite EMPTY).
+      const confirmed = await serviceWorker.evaluate(async () => {
+        const raw = await chrome.storage.local.get(['profile'])
+        const profile = raw.profile as { firstName?: string; email?: string } | undefined
+        return {
+          firstName: profile?.firstName ?? '',
+          email: profile?.email ?? '',
+        }
+      })
+      if (
+        confirmed.firstName !== store.profile.firstName ||
+        confirmed.email !== store.profile.email
+      ) {
+        await serviceWorker.evaluate(async (payload) => {
+          await chrome.storage.local.set(payload)
+        }, store)
+      }
       return store
     }
     await use(seed)
