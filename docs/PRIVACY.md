@@ -1,6 +1,9 @@
-# Job Fill — Privacy (draft for store listing)
+# Job Fill — Privacy Policy
 
-**Edit before publishing.** This describes what the current code does.
+**Effective date:** 10 November 2026  
+**Public URL:** https://megokul.github.io/job-fill/privacy.html
+
+This policy describes how the Job Fill Chrome extension handles data.
 
 ## What is stored
 
@@ -15,12 +18,18 @@ Job Fill keeps the following in the browser, under `chrome.storage.local` on thi
 
 Autofill does not send profile data, mappings, answers, or page contents to any server. There are no analytics, accounts, or sync endpoints in the extension. Filling runs in the page via local content scripts and `chrome.scripting`.
 
+Job Fill does not sell or share personal data with third parties.
+
 ## Export and delete
 
 - **Export** — Options → export writes a JSON backup of the stored data to a file you choose on your device.
 - **Import** — Options → import can merge or replace from a JSON file you select.
-- **Delete** — Clear Job Fill’s storage by removing the extension (Chrome deletes its `chrome.storage.local` data), or by replacing/clearing data via import and Options editing. There is no cloud copy to erase.
+- **Delete** — Remove the extension (Chrome deletes its `chrome.storage.local` data), or clear/replace data via Options and import. There is no cloud copy to erase.
 
 ## Permissions note
 
-Host access is used so the extension can run in application pages and in cross-origin iframes that host the form. See `docs/STORE_LISTING.md` for permission justifications.
+Host access (`http://*/*`, `https://*/*`) is used so the extension can run on application pages and in cross-origin iframes that host the form. See the Chrome Web Store listing permission justifications for details.
+
+## Contact
+
+Questions about this policy: [nvgokulkrishna@gmail.com](mailto:nvgokulkrishna@gmail.com).

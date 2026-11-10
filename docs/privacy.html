@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Job Fill — Privacy Policy</title>
+    <meta
+      name="description"
+      content="Privacy policy for the Job Fill Chrome extension. Profile data stays in chrome.storage.local on your device."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #0f172a;
+        --muted: #475569;
+        --line: #e2e8f0;
+        --accent: #0f766e;
+        --bg: #f8fafc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      main {
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+      }
+      h1 {
+        font-size: 1.75rem;
+        margin: 0 0 0.35rem;
+      }
+      h2 {
+        font-size: 1.15rem;
+        margin: 2rem 0 0.6rem;
+      }
+      p,
+      li {
+        color: var(--muted);
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.95rem;
+        margin-bottom: 1.5rem;
+      }
+      a {
+        color: var(--accent);
+      }
+      ul {
+        padding-left: 1.2rem;
+      }
+      hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 2rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Job Fill — Privacy Policy</h1>
+      <p class="meta">Effective date: 10 November 2026</p>
+
+      <p>This policy describes how the Job Fill Chrome extension handles data.</p>
+
+      <h2>What is stored</h2>
+      <p>
+        Job Fill keeps the following in the browser, under
+        <code>chrome.storage.local</code> on this device only:
+      </p>
+      <ul>
+        <li>
+          <strong>Profile</strong> — name, contact, address, links,
+          work-authorization answers, and related fields you enter in Options.
+        </li>
+        <li>
+          <strong>Form mappings</strong> — per-site field mappings you create in
+          Map mode.
+        </li>
+        <li>
+          <strong>Custom answers</strong> — free-text answers you create and
+          optionally map to fields.
+        </li>
+        <li>
+          <strong>Settings</strong> — including which origins may autofill on
+          load, and whether filled fields are highlighted.
+        </li>
+      </ul>
+
+      <h2>What is not transmitted</h2>
+      <p>
+        Autofill does not send profile data, mappings, answers, or page contents
+        to any server. There are no analytics, accounts, or sync endpoints in the
+        extension. Filling runs in the page via local content scripts and
+        <code>chrome.scripting</code>.
+      </p>
+      <p>Job Fill does not sell or share personal data with third parties.</p>
+
+      <h2>Export and delete</h2>
+      <ul>
+        <li>
+          <strong>Export</strong> — Options → export writes a JSON backup to a
+          file you choose on your device.
+        </li>
+        <li>
+          <strong>Import</strong> — Options → import can merge or replace from a
+          JSON file you select.
+        </li>
+        <li>
+          <strong>Delete</strong> — Remove the extension (Chrome deletes its
+          <code>chrome.storage.local</code> data), or clear/replace data via
+          Options and import. There is no cloud copy to erase.
+        </li>
+      </ul>
+
+      <h2>Permissions note</h2>
+      <p>
+        Host access (<code>http://*/*</code>, <code>https://*/*</code>) is used
+        so the extension can run on application pages and in cross-origin
+        iframes that host the form.
+      </p>
+
+      <hr />
+      <p>
+        Contact:
+        <a href="mailto:nvgokulkrishna@gmail.com">nvgokulkrishna@gmail.com</a>
+      </p>
+    </main>
+  </body>
+</html>
