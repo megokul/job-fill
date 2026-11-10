@@ -41,8 +41,43 @@ test.describe('React', () => {
     )
     expect(afterUndo.firstName).toBe('')
     expect(afterUndo.email).toBe('')
-    // Combobox undo is best-effort; native text fields must clear.
-    // Scripted widgets may keep React state — assert what we can.
     expect(afterUndo.phone).toBe('')
+  })
+
+  test('undo restores location and workAuthorized display; country display and all three React states cannot be undone', async ({
+    page,
+    seedStore,
+    fillTab,
+    undoTab,
+    tabIdFor,
+  }) => {
+    await seedStore()
+    await page.goto(`${ORIGIN_A}/react-dist/`)
+    await page.waitForSelector('[data-testid="email"]')
+    const tabId = await tabIdFor(page.url())
+    await fillTab(tabId)
+
+    await expect(page.locator('[data-testid="location"]')).toHaveValue('London, CA')
+    await expect(page.locator('[data-testid="workAuthorized"]')).toHaveText(/Yes/i)
+    await expect(page.locator('[data-testid="country"]')).toContainText(
+      /United States of America/i,
+    )
+
+    await undoTab(tabId)
+
+    // Location input value and workAuthorized button label are restored.
+    await expect(page.locator('[data-testid="location"]')).toHaveValue('')
+    await expect(page.locator('[data-testid="workAuthorized"]')).toHaveText(/Select/i)
+    // Country (react-select) keeps its visible selection — cannot undo.
+    await expect(page.locator('[data-testid="country"]')).toContainText(
+      /United States of America/i,
+    )
+    // React form state for all three stays filled; undo never calls widget onChange.
+    const afterUndo = JSON.parse(
+      await page.locator('[data-testid="state"]').innerText(),
+    )
+    expect(afterUndo.location).toBe('London, CA')
+    expect(afterUndo.country).toBe('231')
+    expect(afterUndo.workAuthorized).toBe('yes')
   })
 })

@@ -1,7 +1,7 @@
 import { test, expect, ORIGIN_A } from '../fixtures'
 
 test.describe('No network', () => {
-  test('extension makes no requests beyond the fixture page during fill', async ({
+  test('page, frame, and service-worker requests stay on the fixture origins during fill', async ({
     context,
     page,
     seedStore,
@@ -11,23 +11,25 @@ test.describe('No network', () => {
   }) => {
     await seedStore()
     const extensionOrigin = `chrome-extension://${extensionId}`
-    const requests: string[] = []
+    const allowedPrefixes = [ORIGIN_A, 'http://127.0.0.1:4174', extensionOrigin]
+    const external: { url: string; fromServiceWorker: boolean }[] = []
+
+    // Playwright reports service-worker requests on the BrowserContext
+    // (request.serviceWorker() is set). See https://playwright.dev/docs/service-workers
     context.on('request', (req) => {
       const url = req.url()
-      if (url.startsWith(extensionOrigin)) requests.push(url)
-      if (url.startsWith('http') && !url.startsWith(ORIGIN_A) && !url.startsWith('http://127.0.0.1:4174')) {
-        requests.push(url)
-      }
+      if (allowedPrefixes.some((p) => url.startsWith(p))) return
+      if (!(url.startsWith('http://') || url.startsWith('https://'))) return
+      external.push({
+        url,
+        fromServiceWorker: Boolean(req.serviceWorker()),
+      })
     })
+
     await page.goto(`${ORIGIN_A}/plain.html`)
     const tabId = await tabIdFor(page.url())
     await fillTab(tabId)
-    const external = requests.filter(
-      (u) =>
-        !u.startsWith(ORIGIN_A) &&
-        !u.startsWith('http://127.0.0.1:4174') &&
-        !u.startsWith(extensionOrigin),
-    )
+
     expect(external).toEqual([])
   })
 })
