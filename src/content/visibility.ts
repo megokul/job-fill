@@ -20,6 +20,8 @@ export type VisibilityDeps = {
   getStyle: (el: Element) => StyleLike
   checkVisibility?: (el: Element) => boolean | null
   documentScrollSize?: () => { width: number; height: number }
+  /** Page scroll offsets; getBoundingClientRect is viewport-relative. */
+  scrollOffset?: () => { x: number; y: number }
 }
 
 const CONTROL_SELECTOR = 'input, select, textarea, button'
@@ -98,11 +100,25 @@ export function passesVisualChecks(
           : Number.POSITIVE_INFINITY,
     } as { width: number; height: number })
 
-  if (rect.right <= 0 || rect.bottom <= 0) return false
+  const scroll =
+    deps.scrollOffset?.() ??
+    (typeof window !== 'undefined'
+      ? { x: window.scrollX || window.pageXOffset || 0, y: window.scrollY || window.pageYOffset || 0 }
+      : { x: 0, y: 0 })
+
+  // Convert viewport-relative rects to document coordinates before the
+  // off-document checks. A control scrolled above the viewport is still
+  // on-document and must remain fillable.
+  const docLeft = rect.left + scroll.x
+  const docRight = rect.right + scroll.x
+  const docTop = rect.top + scroll.y
+  const docBottom = rect.bottom + scroll.y
+
+  if (docRight <= 0 || docBottom <= 0) return false
   // Skip "beyond document" when the environment reports a zero-sized document
   // (common in happy-dom unit tests without layout).
   if (doc.width > 0 && doc.height > 0) {
-    if (rect.left >= doc.width || rect.top >= doc.height) return false
+    if (docLeft >= doc.width || docTop >= doc.height) return false
   }
 
   return true
@@ -167,6 +183,10 @@ export function isFillableVisible(
         return null
       }
     },
+    scrollOffset: () => ({
+      x: window.scrollX || window.pageXOffset || 0,
+      y: window.scrollY || window.pageYOffset || 0,
+    }),
     ...deps,
   }
 
