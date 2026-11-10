@@ -101,6 +101,27 @@ function radioGroupKey(el: HTMLInputElement): string {
   return `name:${formId}:${el.name || el.id}`
 }
 
+export function getRadioGroupMembers(radio: HTMLInputElement): HTMLInputElement[] {
+  const radiogroup = radio.closest('[role="radiogroup"]')
+  if (radiogroup) {
+    return Array.from(
+      radiogroup.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+    )
+  }
+  const name = radio.name
+  if (!name) return [radio]
+  const root: ParentNode = radio.form ?? document
+  return Array.from(
+    root.querySelectorAll<HTMLInputElement>(
+      `input[type="radio"][name="${cssAttr(name)}"]`,
+    ),
+  )
+}
+
+function cssAttr(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 export function extractSignals(el: HTMLElement): FieldSignals {
   const input = el as HTMLInputElement
   const isRadio = el instanceof HTMLInputElement && el.type === 'radio'

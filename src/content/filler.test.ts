@@ -297,7 +297,7 @@ describe('fill → undo round trip', () => {
     expect((document.getElementById('wa') as HTMLInputElement).checked).toBe(false)
   })
 
-  it('restores radio group', () => {
+  it('restores radio group after filling yes', () => {
     mount(radioGroupsHtml)
     fakeVisible()
     fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
@@ -305,9 +305,34 @@ describe('fill → undo round trip', () => {
       'input[name="work_auth"][value="yes"]',
     ) as HTMLInputElement
     expect(yes.checked).toBe(true)
-    undoLastFill()
+    const { restored } = undoLastFill()
+    expect(restored).toBeGreaterThan(0)
     const anyChecked = Array.from(
       document.querySelectorAll<HTMLInputElement>('input[name="work_auth"]'),
+    ).some((r) => r.checked)
+    expect(anyChecked).toBe(false)
+  })
+
+  it('unchecks radio group after filling no then undo', () => {
+    mount(`
+      <fieldset>
+        <legend>Will you require sponsorship?</legend>
+        <label><input type="radio" name="sponsor" value="yes" /> Yes</label>
+        <label><input type="radio" name="sponsor" value="no" /> No</label>
+      </fieldset>
+    `)
+    fakeVisible()
+    const profile = { ...sampleProfile, requiresSponsorship: 'no' as const }
+    fillPage(profile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
+    const no = document.querySelector(
+      'input[name="sponsor"][value="no"]',
+    ) as HTMLInputElement
+    expect(no.checked).toBe(true)
+    const { restored } = undoLastFill()
+    expect(restored).toBe(1)
+    expect(no.checked).toBe(false)
+    const anyChecked = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[name="sponsor"]'),
     ).some((r) => r.checked)
     expect(anyChecked).toBe(false)
   })

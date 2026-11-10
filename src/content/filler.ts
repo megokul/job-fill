@@ -13,6 +13,7 @@ import type {
 import {
   collectFillableElements,
   extractSignals,
+  getRadioGroupMembers,
   matchFields,
   type FieldSignals,
 } from './matcher'
@@ -331,22 +332,7 @@ function selectRadio(radio: HTMLInputElement, value: string): boolean {
   return false
 }
 
-function getRadioGroupMembers(radio: HTMLInputElement): HTMLInputElement[] {
-  const radiogroup = radio.closest('[role="radiogroup"]')
-  if (radiogroup) {
-    return Array.from(
-      radiogroup.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
-    )
-  }
-  const name = radio.name
-  if (!name) return [radio]
-  const root = radio.form ?? document
-  return Array.from(
-    root.querySelectorAll<HTMLInputElement>(
-      `input[type="radio"][name="${cssAttr(name)}"]`,
-    ),
-  )
-}
+export { getRadioGroupMembers }
 
 function optionLabel(r: HTMLInputElement): string {
   if (r.id) {
