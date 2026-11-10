@@ -359,6 +359,8 @@ function getGroupContext(el: HTMLElement): string {
   const form = el.closest('form') ?? document.body
   // Walk previous siblings of the field and of its ancestors up to the form.
   // Never use h1; never use "first heading in enclosing section".
+  // A nested heading in a previous sibling counts only when that sibling has
+  // no form controls (otherwise it is a different section).
   let node: HTMLElement | null = el
   while (node && node !== form) {
     let prev = node.previousElementSibling
@@ -367,7 +369,12 @@ function getGroupContext(el: HTMLElement): string {
         return (prev.textContent ?? '').trim()
       }
       const nested = prev.querySelector('h2,h3,h4,h5,h6')
-      if (nested?.textContent?.trim()) return nested.textContent.trim()
+      if (nested?.textContent?.trim()) {
+        const hasControls = Boolean(
+          prev.querySelector('input, select, textarea'),
+        )
+        if (!hasControls) return nested.textContent.trim()
+      }
       prev = prev.previousElementSibling
     }
     node = node.parentElement
