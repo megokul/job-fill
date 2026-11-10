@@ -1,6 +1,7 @@
 import { mappingsForUrl } from '../shared/pathMatch'
 import { getStore, profileCompleteness, saveSettings } from '../shared/storage'
 import {
+  canUndoTab,
   fillTab,
   frameInfo,
   pickFormFrame,
@@ -21,6 +22,8 @@ type PageContext = {
   origin: string
   formHostNote?: string
   formHref: string
+  canUndo: boolean
+  tabId: number
 }
 
 type ViewState =
@@ -99,6 +102,7 @@ async function resolvePageContext(
       formHostNote = `Form hosted on ${formOrigin}`
     }
   }
+  const canUndo = await canUndoTab(tabId)
   return {
     store,
     host: tab.hostname.replace(/^www\./, ''),
@@ -106,6 +110,8 @@ async function resolvePageContext(
     origin: formOrigin,
     formHostNote,
     formHref,
+    canUndo,
+    tabId,
   }
 }
 
@@ -177,41 +183,56 @@ function render(state: ViewState): void {
   }
 
   if (state.kind === 'ready') {
-    app.append(
+    const actionChildren: HTMLElement[] = [
       h(
-        'div',
-        { className: `actions${busy ? ' busy' : ''}` },
+        'button',
+        {
+          className: 'btn primary',
+          type: 'button',
+          disabled: busy,
+          onClick: () => void doFill(state),
+        },
+        'Fill this page',
+        h('span', { className: 'hint' }, '  Alt+Shift+F'),
+      ),
+    ]
+    if (state.canUndo) {
+      actionChildren.push(
         h(
           'button',
           {
-            className: 'btn primary',
+            className: 'btn',
             type: 'button',
             disabled: busy,
-            onClick: () => void doFill(state),
+            onClick: () => void doUndoReady(state),
           },
-          'Fill this page',
-          h('span', { className: 'hint' }, '  Alt+Shift+F'),
+          'Undo last fill',
+        ),
+      )
+    }
+    actionChildren.push(
+      h(
+        'div',
+        { className: 'row' },
+        h(
+          'button',
+          {
+            className: 'btn',
+            type: 'button',
+            disabled: busy,
+            onClick: () => void doMap(),
+          },
+          'Map this form',
         ),
         h(
-          'div',
-          { className: 'row' },
-          h(
-            'button',
-            {
-              className: 'btn',
-              type: 'button',
-              disabled: busy,
-              onClick: () => void doMap(),
-            },
-            'Map this form',
-          ),
-          h(
-            'button',
-            { className: 'btn ghost', type: 'button', onClick: openOptions },
-            'Edit profile',
-          ),
+          'button',
+          { className: 'btn ghost', type: 'button', onClick: openOptions },
+          'Edit profile',
         ),
       ),
+    )
+    app.append(
+      h('div', { className: `actions${busy ? ' busy' : ''}` }, ...actionChildren),
       autofillToggle(store, origin, Boolean(mappingName)),
       progress(filled, total),
     )
@@ -421,15 +442,39 @@ async function doFill(
 async function doUndo(state: Extract<ViewState, { kind: 'result' }>): Promise<void> {
   await undoTab(state.tabId)
   const store = await getStore()
-  render({
-    kind: 'ready',
-    store,
-    host: state.host,
-    mappingName: state.mappingName,
-    origin: state.origin,
-    formHostNote: state.formHostNote,
-    formHref: state.formHref,
-  })
+  const tab = await resolveTargetTab()
+  if (!tab?.id || !tab.url) {
+    render({
+      kind: 'ready',
+      store,
+      host: state.host,
+      mappingName: state.mappingName,
+      origin: state.origin,
+      formHostNote: state.formHostNote,
+      formHref: state.formHref,
+      canUndo: false,
+      tabId: state.tabId,
+    })
+    return
+  }
+  const ctx = await resolvePageContext(store, tab.id, tab.url)
+  render({ kind: 'ready', ...ctx })
+}
+
+async function doUndoReady(
+  state: Extract<ViewState, { kind: 'ready' }>,
+): Promise<void> {
+  busy = true
+  render(state)
+  await undoTab(state.tabId)
+  const store = await getStore()
+  const tab = await resolveTargetTab()
+  busy = false
+  if (tab?.id && tab.url) {
+    render({ kind: 'ready', ...(await resolvePageContext(store, tab.id, tab.url)) })
+    return
+  }
+  render({ ...state, store, canUndo: false })
 }
 
 async function doMap(): Promise<void> {

@@ -3,6 +3,7 @@ import type { FillResult, ToastSummary } from './messages'
 export type JobFillFrameApi = {
   fill: () => Promise<FillResult>
   undo: () => Promise<{ restored: number }>
+  canUndo: () => boolean
   countFillable: () => number
   startMap: () => Promise<{ ok: true }>
   stopMap: () => Promise<{ ok: true }>
@@ -55,6 +56,17 @@ export async function undoTab(tabId: number): Promise<number> {
     },
   })
   return results.reduce((sum, r) => sum + (typeof r.result === 'number' ? r.result : 0), 0)
+}
+
+export async function canUndoTab(tabId: number): Promise<boolean> {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => {
+      const api = globalThis.__jobFill
+      return Boolean(api?.canUndo?.())
+    },
+  })
+  return results.some((r) => r.result === true)
 }
 
 export async function startMapInBestFrame(tabId: number): Promise<boolean> {

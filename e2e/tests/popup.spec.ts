@@ -26,6 +26,17 @@ test.describe('Popup', () => {
     await expect(popup.locator('.pill')).toContainText('Ready')
     await expect(page.locator('#email')).toHaveValue('')
 
+    // Fill again, close popup, reopen — ready state offers Undo last fill.
+    await popup.getByRole('button', { name: /Fill this page/i }).click()
+    await expect(page.locator('#email')).toHaveValue('ada@example.com')
+    await popup.close()
+    const popupAgain = await context.newPage()
+    await openPopup(popupAgain, extensionId, tabId)
+    await expect(popupAgain.getByRole('button', { name: 'Undo last fill' })).toBeVisible()
+    await popupAgain.getByRole('button', { name: 'Undo last fill' }).click()
+    await expect(page.locator('#email')).toHaveValue('')
+    await popupAgain.close()
+
     await page.goto(`${ORIGIN_A}/embedded.html`)
     await page.frameLocator('#app-frame').locator('#email').waitFor()
     const embeddedTabId = await tabIdFor(page.url())

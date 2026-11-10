@@ -17,6 +17,10 @@ export function beginUndoSnapshot(): void {
   snapshot = []
 }
 
+export function canUndo(): boolean {
+  return snapshot.length > 0
+}
+
 export function recordUndo(entry: UndoEntry): void {
   snapshot.push(entry)
 }

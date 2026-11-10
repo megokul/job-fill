@@ -6,11 +6,12 @@ import type { FormMapping, Profile, Settings, CustomAnswer } from '../shared/typ
 import { fillPage, showToast } from './filler'
 import { collectFillableElements } from './matcher'
 import { isMapModeActive, startMapMode, stopMapMode } from './mapper-ui'
-import { undoLastFill } from './undo'
+import { canUndo as hasUndoSnapshot, undoLastFill } from './undo'
 
 type FrameApi = {
   fill: () => Promise<FillResult>
   undo: () => Promise<{ restored: number }>
+  canUndo: () => boolean
   countFillable: () => number
   startMap: () => Promise<{ ok: true }>
   stopMap: () => Promise<{ ok: true }>
@@ -30,6 +31,7 @@ document.addEventListener(
 const api: FrameApi = {
   fill: async () => runFill(),
   undo: async () => undoLastFill(),
+  canUndo: () => hasUndoSnapshot(),
   countFillable: () => collectFillableElements().length,
   startMap: async () => runStartMapMode(),
   stopMap: async () => {
