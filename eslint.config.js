@@ -5,10 +5,16 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'e2e-report/**',
+      'e2e/fixtures/react-dist/**',
+      'e2e/**/*.mjs',
+    ],
   },
   {
-    files: ['src/**/*.{ts,tsx}', '*.ts'],
+    files: ['src/**/*.{ts,tsx}', '*.ts', 'e2e/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',

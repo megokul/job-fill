@@ -37,9 +37,26 @@ let busy = false
 
 void boot()
 
+async function resolveTargetTab(): Promise<chrome.tabs.Tab | null> {
+  const params = new URLSearchParams(location.search)
+  const raw = params.get('tabId')
+  if (raw) {
+    const id = Number(raw)
+    if (Number.isFinite(id) && id > 0) {
+      try {
+        return await chrome.tabs.get(id)
+      } catch {
+        return null
+      }
+    }
+  }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  return tab ?? null
+}
+
 async function boot(): Promise<void> {
   const store = await getStore()
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = await resolveTargetTab()
   if (!tab?.id || !tab.url || !/^https?:/i.test(tab.url)) {
     render({
       kind: 'unsupported',
@@ -376,7 +393,7 @@ async function doFill(
 ): Promise<void> {
   busy = true
   render(state.kind === 'result' ? { ...state, kind: 'ready' } : state)
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = await resolveTargetTab()
   if (!tab?.id || !tab.url) {
     busy = false
     return
@@ -416,7 +433,7 @@ async function doUndo(state: Extract<ViewState, { kind: 'result' }>): Promise<vo
 }
 
 async function doMap(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = await resolveTargetTab()
   if (!tab?.id) return
   await startMapInBestFrame(tab.id)
   window.close()

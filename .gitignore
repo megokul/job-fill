@@ -11,6 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+e2e-report
+test-results
+playwright-report
+release
+e2e/fixtures/react-dist
 
 # Editor directories and files
 .vscode/*
