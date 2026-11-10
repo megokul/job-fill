@@ -110,7 +110,9 @@ function App(): React.ReactElement {
               name="workAuthorized"
               value="yes"
               checked={state.workAuthorized === 'yes'}
-              onChange={() => set('workAuthorized')('yes')}
+              onChange={(e) =>
+                set('workAuthorized')(e.target.checked ? 'yes' : '')
+              }
             />{' '}
             Yes
           </label>
@@ -120,7 +122,9 @@ function App(): React.ReactElement {
               name="workAuthorized"
               value="no"
               checked={state.workAuthorized === 'no'}
-              onChange={() => set('workAuthorized')('no')}
+              onChange={(e) =>
+                set('workAuthorized')(e.target.checked ? 'no' : '')
+              }
             />{' '}
             No
           </label>

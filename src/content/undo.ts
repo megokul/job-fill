@@ -42,12 +42,24 @@ export function capturePrevious(el: HTMLElement): UndoEntry['previous'] {
 }
 
 function setNativeChecked(el: HTMLInputElement, checked: boolean): void {
+  // Bust React's value tracker so controlled radios/checkboxes see the change.
+  const tracker = (el as HTMLInputElement & {
+    _valueTracker?: { setValue: (v: string) => void }
+  })._valueTracker
+  if (tracker) tracker.setValue(checked ? 'false' : 'true')
+
   const descriptor = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,
     'checked',
   )
   if (descriptor?.set) descriptor.set.call(el, checked)
   else el.checked = checked
+}
+
+function dispatchCheckEvents(el: HTMLInputElement): void {
+  el.dispatchEvent(new Event('click', { bubbles: true }))
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
 export function undoLastFill(): { restored: number } {
@@ -63,15 +75,13 @@ export function undoLastFill(): { restored: number } {
       if (want === null) {
         if (currentlyChecked) {
           setNativeChecked(currentlyChecked, false)
-          currentlyChecked.dispatchEvent(new Event('input', { bubbles: true }))
-          currentlyChecked.dispatchEvent(new Event('change', { bubbles: true }))
+          dispatchCheckEvents(currentlyChecked)
         }
       } else if (currentlyChecked !== want) {
         want.click()
         if (!want.checked) {
           setNativeChecked(want, true)
-          want.dispatchEvent(new Event('input', { bubbles: true }))
-          want.dispatchEvent(new Event('change', { bubbles: true }))
+          dispatchCheckEvents(want)
         }
       }
 

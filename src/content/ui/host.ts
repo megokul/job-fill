@@ -30,7 +30,8 @@ export function ensureUiHost(): ShadowRoot {
     existing.style.height = '0'
     document.documentElement.appendChild(existing)
   }
-  shadow = existing.shadowRoot ?? existing.attachShadow({ mode: 'closed' })
+  // Open shadow so Playwright E2E (and the page) can reach map-mode / toast UI.
+  shadow = existing.shadowRoot ?? existing.attachShadow({ mode: 'open' })
   if (shadow.querySelector('.layer')) return shadow
   const style = document.createElement('style')
   style.textContent = `
