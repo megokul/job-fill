@@ -1,7 +1,7 @@
 import type { FilledField, FillResult } from '../shared/messages'
 import { mappingsForUrl } from '../shared/pathMatch'
-import { countryAliases, stateAliases } from '../shared/regions'
 import { resolveValue } from '../shared/resolveValue'
+import { pickOption } from './pickOption'
 import type {
   CustomAnswer,
   FieldMapping,
@@ -28,7 +28,7 @@ import {
 
 const CHECKBOX_KEYS = new Set<FillKey>(['workAuthorized', 'requiresSponsorship'])
 
-export function fillPage(
+export async function fillPage(
   profile: Profile,
   formMappings: FormMapping[],
   settings: Settings,
@@ -36,7 +36,7 @@ export function fillPage(
     isVisible?: (el: HTMLElement) => boolean
     customAnswers?: CustomAnswer[]
   },
-): FillResult {
+): Promise<FillResult> {
   beginUndoSnapshot()
 
   const filled: FilledField[] = []
@@ -241,71 +241,14 @@ function selectOption(
   value: string,
   fillKey: FillKey | null,
 ): boolean {
-  const normalized = value.trim().toLowerCase()
-  if (!normalized) return false
-
-  const yesNo = normalized === 'yes' || normalized === 'no' ? normalized : null
-
-  for (const opt of Array.from(select.options)) {
-    const text = opt.text.trim().toLowerCase()
-    const val = opt.value.trim().toLowerCase()
-    if (val === normalized || text === normalized) {
-      setNativeSelect(select, opt.value)
-      return true
-    }
-  }
-
-  if (yesNo) {
-    for (const opt of Array.from(select.options)) {
-      const text = opt.text.trim()
-      const val = opt.value.trim()
-      if (yesNo === 'yes' && (isYesToken(val) || isYesToken(text))) {
-        setNativeSelect(select, opt.value)
-        return true
-      }
-      if (yesNo === 'no' && (isNoToken(val) || isNoToken(text))) {
-        setNativeSelect(select, opt.value)
-        return true
-      }
-    }
-  }
-
-  const aliases =
-    fillKey === 'state'
-      ? stateAliases(value)
-      : fillKey === 'country'
-        ? countryAliases(value)
-        : ([] as string[])
-  for (const alias of aliases) {
-    const a = alias.toLowerCase()
-    for (const opt of Array.from(select.options)) {
-      const text = opt.text.trim().toLowerCase()
-      const val = opt.value.trim().toLowerCase()
-      if (val === a || text === a) {
-        setNativeSelect(select, opt.value)
-        return true
-      }
-    }
-  }
-
-  const valueTokens = normalized.split(/\s+/).filter(Boolean)
-  for (const opt of Array.from(select.options)) {
-    const textTokens = opt.text.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    if (valueTokens.length === 0 || textTokens.length < valueTokens.length) continue
-    let prefix = true
-    for (let i = 0; i < valueTokens.length; i++) {
-      if (textTokens[i] !== valueTokens[i]) {
-        prefix = false
-        break
-      }
-    }
-    if (prefix) {
-      setNativeSelect(select, opt.value)
-      return true
-    }
-  }
-
-  return false
+  const options = Array.from(select.options).map((opt) => ({
+    text: opt.text,
+    value: opt.value,
+  }))
+  const idx = pickOption(options, value, fillKey)
+  if (idx < 0) return false
+  setNativeSelect(select, select.options[idx].value)
+  return true
 }
 
 function isYesToken(raw: string): boolean {
