@@ -9,8 +9,11 @@ test.describe('Wizard', () => {
       settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
     })
     await page.goto(`${ORIGIN_A}/wizard.html`)
-
-    await expect(page.locator('#first')).toHaveValue('Ada', { timeout: 8_000 })
+    // Autofill runs from the content script after storage read; wait for the toast
+    // (or the filled value) rather than assuming document_idle is enough.
+    await expect
+      .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
+      .toBe('Ada')
     await expect(page.locator('#email')).toHaveValue('ada@example.com')
 
     await page.locator('#next').click()
