@@ -28,6 +28,9 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
   return run
 }
 
+type LegacySettings = Partial<Settings> & { autofillOnLoad?: boolean }
+
+/** Read-only. Returns a migrated in-memory view; never writes. */
 export async function getStore(): Promise<Store> {
   const raw = await chrome.storage.local.get([...STORE_KEYS])
   const formMappings = Array.isArray(raw.formMappings)
@@ -35,11 +38,11 @@ export async function getStore(): Promise<Store> {
     : []
 
   const settings = migrateSettings(
-    raw.settings as (Partial<Settings> & { autofillOnLoad?: boolean }) | undefined,
+    raw.settings as LegacySettings | undefined,
     formMappings,
   )
 
-  const store: Store = {
+  return {
     schemaVersion:
       typeof raw.schemaVersion === 'number'
         ? raw.schemaVersion
@@ -51,31 +54,44 @@ export async function getStore(): Promise<Store> {
       ? (raw.customAnswers as CustomAnswer[])
       : [],
   }
+}
 
-  const needsPersist =
-    (raw.settings &&
-      typeof (raw.settings as { autofillOnLoad?: boolean }).autofillOnLoad ===
-        'boolean') ||
-    raw.schemaVersion !== CURRENT_SCHEMA_VERSION
+/**
+ * Persist schema/settings migration. Runs inside enqueueWrite so it cannot
+ * race past a newer seed. Writes settings only when legacy autofillOnLoad is
+ * present; on empty storage writes schemaVersion alone.
+ */
+export async function migrateStore(): Promise<void> {
+  await enqueueWrite(async () => {
+    const raw = await chrome.storage.local.get([...STORE_KEYS])
+    const formMappings = Array.isArray(raw.formMappings)
+      ? (raw.formMappings as FormMapping[])
+      : []
+    const settingsRaw = raw.settings as LegacySettings | undefined
+    const hasLegacyAutofill =
+      settingsRaw != null && typeof settingsRaw.autofillOnLoad === 'boolean'
+    const needsSchema =
+      typeof raw.schemaVersion !== 'number' ||
+      raw.schemaVersion !== CURRENT_SCHEMA_VERSION
 
-  if (needsPersist) {
-    // Only persist migrated settings/version. Never rewrite profile or
-    // customAnswers here — a concurrent writer (e.g. first-run Options
-    // open racing an import/seed) must not be clobbered with EMPTY_PROFILE.
-    await chrome.storage.local.set({
-      settings: {
-        autofillSites: store.settings.autofillSites,
-        highlightFilled: store.settings.highlightFilled,
-      },
+    if (!hasLegacyAutofill && !needsSchema) return
+
+    const patch: Record<string, unknown> = {
       schemaVersion: CURRENT_SCHEMA_VERSION,
-    })
-  }
-
-  return store
+    }
+    if (hasLegacyAutofill) {
+      const migrated = migrateSettings(settingsRaw, formMappings)
+      patch.settings = {
+        autofillSites: migrated.autofillSites,
+        highlightFilled: migrated.highlightFilled,
+      }
+    }
+    await chrome.storage.local.set(patch)
+  })
 }
 
 function migrateSettings(
-  raw: (Partial<Settings> & { autofillOnLoad?: boolean }) | undefined,
+  raw: LegacySettings | undefined,
   formMappings: FormMapping[],
 ): Settings {
   const highlightFilled = raw?.highlightFilled !== false

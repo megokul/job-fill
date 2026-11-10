@@ -9,9 +9,6 @@ test.describe('Wizard', () => {
       settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
     })
     await page.goto(`${ORIGIN_A}/wizard.html`)
-    // Reload once so the content script bootstraps against already-seeded storage
-    // (first-install Options open can race the initial document_idle pass).
-    await page.reload()
     await expect
       .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
       .toBe('Ada')
@@ -48,7 +45,6 @@ test.describe('Wizard', () => {
       settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
     })
     await page.goto(`${ORIGIN_A}/wizard.html`)
-    await page.reload()
     await expect
       .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
       .toBe('Ada')
@@ -73,7 +69,6 @@ test.describe('Wizard', () => {
       settings: { autofillSites: [ORIGIN_A], highlightFilled: false },
     })
     await page.goto(`${ORIGIN_A}/wizard.html`)
-    await page.reload()
     await expect
       .poll(async () => page.locator('#first').inputValue(), { timeout: 15_000 })
       .toBe('Ada')

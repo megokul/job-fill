@@ -43,6 +43,31 @@ export const test = base.extend<Fixtures>({
         `--load-extension=${extensionPath}`,
       ],
     })
+    // Wait for the service worker so onInstalled (migrateStore + openOptions)
+    // can finish before tests navigate the default page.
+    try {
+      let [worker] = context.serviceWorkers()
+      if (!worker) {
+        worker = await context.waitForEvent('serviceworker', { timeout: 15_000 })
+      }
+      await Promise.race([
+        worker.evaluate(() => undefined),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('sw evaluate timeout')), 5_000),
+        ),
+      ]).catch(() => undefined)
+    } catch {
+      // Extension may still load; tests that need the SW wait in serviceWorker.
+    }
+    await new Promise((r) => setTimeout(r, 500))
+    for (const p of [...context.pages()]) {
+      if (p.url().includes('/src/options/')) {
+        await p.close().catch(() => undefined)
+      }
+    }
+    if (context.pages().length === 0) {
+      await context.newPage()
+    }
     await use(context)
     await context.close()
     fs.rmSync(userDataDir, { recursive: true, force: true })
@@ -68,23 +93,6 @@ export const test = base.extend<Fixtures>({
         await chrome.storage.local.clear()
         await chrome.storage.local.set(payload)
       }, store)
-      // Confirm the seed stuck (first-run Options getStore used to rewrite EMPTY).
-      const confirmed = await serviceWorker.evaluate(async () => {
-        const raw = await chrome.storage.local.get(['profile'])
-        const profile = raw.profile as { firstName?: string; email?: string } | undefined
-        return {
-          firstName: profile?.firstName ?? '',
-          email: profile?.email ?? '',
-        }
-      })
-      if (
-        confirmed.firstName !== store.profile.firstName ||
-        confirmed.email !== store.profile.email
-      ) {
-        await serviceWorker.evaluate(async (payload) => {
-          await chrome.storage.local.set(payload)
-        }, store)
-      }
       return store
     }
     await use(seed)

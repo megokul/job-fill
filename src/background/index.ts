@@ -1,10 +1,15 @@
 import type { Message } from '../shared/messages'
+import { migrateStore } from '../shared/storage'
 import { fillTab, toastTopFrame, undoTab } from '../shared/tabApi'
 
 chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === 'install') {
-    void chrome.runtime.openOptionsPage()
-  }
+  if (details.reason !== 'install' && details.reason !== 'update') return
+  void (async () => {
+    await migrateStore()
+    if (details.reason === 'install') {
+      await chrome.runtime.openOptionsPage()
+    }
+  })()
 })
 
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
