@@ -5,7 +5,7 @@ export default defineManifest({
   name: 'Job Fill',
   description:
     'Autofill job application forms from your local profile, with optional manual field mappings.',
-  version: '1.0.0',
+  version: '1.1.0',
   icons: {
     '16': 'public/icons/icon-16.png',
     '48': 'public/icons/icon-48.png',
@@ -33,6 +33,8 @@ export default defineManifest({
       matches: ['http://*/*', 'https://*/*'],
       js: ['src/content/index.ts'],
       run_at: 'document_idle',
+      all_frames: true,
+      match_about_blank: true,
     },
   ],
   permissions: ['storage', 'activeTab', 'scripting'],

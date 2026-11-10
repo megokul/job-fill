@@ -4,29 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Job Fill</title>
+    <link rel="stylesheet" href="../ui/tokens.css" />
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <main class="popup">
-      <header class="header">
-        <div>
-          <h1>Job Fill</h1>
-          <p class="tagline">Local profile autofill</p>
-        </div>
-        <span id="status-pill" class="pill">…</span>
-      </header>
-
-      <p id="status-text" class="status">Loading profile…</p>
-
-      <div class="actions">
-        <button id="fill-btn" type="button" class="btn primary">Fill this page</button>
-        <button id="map-btn" type="button" class="btn">Map this form</button>
-        <button id="options-btn" type="button" class="btn ghost">Open profile</button>
-      </div>
-
-      <p class="hint">Shortcut: Alt+Shift+F to fill. Never auto-submits forms.</p>
-      <p id="message" class="message" hidden></p>
-    </main>
+    <main id="app" class="popup" aria-live="polite"></main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

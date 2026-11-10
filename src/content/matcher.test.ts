@@ -13,8 +13,9 @@ describe('scoreField', () => {
     expect(scoreField(signals, 'linkedinUrl')).toBeGreaterThanOrEqual(70)
   })
 
-  it('does not strongly match bare name to firstName', () => {
+  it('matches bare name to fullName only', () => {
     const signals: FieldSignals = { label: 'Name' }
+    expect(scoreField(signals, 'fullName')).toBeGreaterThanOrEqual(40)
     expect(scoreField(signals, 'firstName')).toBeLessThan(40)
   })
 

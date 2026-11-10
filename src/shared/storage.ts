@@ -1,78 +1,188 @@
 import {
+  CURRENT_SCHEMA_VERSION,
   DEFAULT_SETTINGS,
   EMPTY_PROFILE,
+  REQUIRED_PROFILE_KEYS,
+  type CustomAnswer,
   type FormMapping,
   type Profile,
   type Settings,
   type Store,
 } from './types'
 
-const STORE_KEYS = ['profile', 'formMappings', 'settings'] as const
+const STORE_KEYS = [
+  'schemaVersion',
+  'profile',
+  'formMappings',
+  'settings',
+  'customAnswers',
+] as const
+
+let writeChain: Promise<unknown> = Promise.resolve()
+
+function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn)
+  writeChain = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
 
 export function createDefaultStore(): Store {
   return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     profile: { ...EMPTY_PROFILE },
     formMappings: [],
     settings: { ...DEFAULT_SETTINGS },
+    customAnswers: [],
   }
 }
 
 export async function getStore(): Promise<Store> {
   const raw = await chrome.storage.local.get([...STORE_KEYS])
-  return {
+  const formMappings = Array.isArray(raw.formMappings)
+    ? (raw.formMappings as FormMapping[])
+    : []
+
+  const settings = migrateSettings(
+    raw.settings as (Partial<Settings> & { autofillOnLoad?: boolean }) | undefined,
+    formMappings,
+  )
+
+  const store: Store = {
+    schemaVersion:
+      typeof raw.schemaVersion === 'number'
+        ? raw.schemaVersion
+        : CURRENT_SCHEMA_VERSION,
     profile: { ...EMPTY_PROFILE, ...(raw.profile as Partial<Profile> | undefined) },
-    formMappings: Array.isArray(raw.formMappings)
-      ? (raw.formMappings as FormMapping[])
+    formMappings,
+    settings,
+    customAnswers: Array.isArray(raw.customAnswers)
+      ? (raw.customAnswers as CustomAnswer[])
       : [],
-    settings: {
-      ...DEFAULT_SETTINGS,
-      ...(raw.settings as Partial<Settings> | undefined),
-    },
   }
+
+  const needsPersist =
+    (raw.settings &&
+      typeof (raw.settings as { autofillOnLoad?: boolean }).autofillOnLoad ===
+        'boolean') ||
+    raw.schemaVersion !== CURRENT_SCHEMA_VERSION
+
+  if (needsPersist) {
+    await chrome.storage.local.set({
+      settings: {
+        autofillSites: store.settings.autofillSites,
+        highlightFilled: store.settings.highlightFilled,
+      },
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      customAnswers: store.customAnswers,
+      profile: store.profile,
+    })
+  }
+
+  return store
+}
+
+function migrateSettings(
+  raw: (Partial<Settings> & { autofillOnLoad?: boolean }) | undefined,
+  formMappings: FormMapping[],
+): Settings {
+  const highlightFilled = raw?.highlightFilled !== false
+  if (Array.isArray(raw?.autofillSites)) {
+    return {
+      autofillSites: raw.autofillSites.filter((s) => typeof s === 'string'),
+      highlightFilled,
+    }
+  }
+  if (raw?.autofillOnLoad === true) {
+    const origins = [...new Set(formMappings.map((m) => m.origin))]
+    return { autofillSites: origins, highlightFilled }
+  }
+  return { autofillSites: [], highlightFilled }
 }
 
 export async function saveProfile(profile: Profile): Promise<Store> {
-  await chrome.storage.local.set({ profile })
-  return getStore()
+  return enqueueWrite(async () => {
+    await chrome.storage.local.set({ profile })
+    return getStore()
+  })
 }
 
 export async function saveSettings(settings: Settings): Promise<Store> {
-  await chrome.storage.local.set({ settings })
-  return getStore()
+  return enqueueWrite(async () => {
+    const clean: Settings = {
+      autofillSites: settings.autofillSites,
+      highlightFilled: settings.highlightFilled,
+    }
+    await chrome.storage.local.set({ settings: clean })
+    return getStore()
+  })
 }
 
 export async function saveFormMapping(mapping: FormMapping): Promise<Store> {
-  const store = await getStore()
-  const idx = store.formMappings.findIndex((m) => m.id === mapping.id)
-  const next = [...store.formMappings]
-  if (idx >= 0) next[idx] = mapping
-  else next.push(mapping)
-  await chrome.storage.local.set({ formMappings: next })
-  return getStore()
+  return enqueueWrite(async () => {
+    const store = await getStore()
+    const idx = store.formMappings.findIndex((m) => m.id === mapping.id)
+    const next = [...store.formMappings]
+    if (idx >= 0) next[idx] = mapping
+    else next.push(mapping)
+    await chrome.storage.local.set({ formMappings: next })
+    return getStore()
+  })
 }
 
 export async function deleteFormMapping(id: string): Promise<Store> {
-  const store = await getStore()
-  const next = store.formMappings.filter((m) => m.id !== id)
-  await chrome.storage.local.set({ formMappings: next })
-  return getStore()
+  return enqueueWrite(async () => {
+    const store = await getStore()
+    const next = store.formMappings.filter((m) => m.id !== id)
+    await chrome.storage.local.set({ formMappings: next })
+    return getStore()
+  })
 }
 
 export async function deleteFieldMapping(
   formId: string,
   fieldId: string,
 ): Promise<Store> {
-  const store = await getStore()
-  const next = store.formMappings.map((m) => {
-    if (m.id !== formId) return m
-    return {
-      ...m,
-      fields: m.fields.filter((f) => f.id !== fieldId),
-      updatedAt: Date.now(),
-    }
+  return enqueueWrite(async () => {
+    const store = await getStore()
+    const next = store.formMappings.map((m) => {
+      if (m.id !== formId) return m
+      return {
+        ...m,
+        fields: m.fields.filter((f) => f.id !== fieldId),
+        updatedAt: Date.now(),
+      }
+    })
+    await chrome.storage.local.set({ formMappings: next })
+    return getStore()
   })
-  await chrome.storage.local.set({ formMappings: next })
-  return getStore()
+}
+
+export async function saveCustomAnswers(
+  customAnswers: CustomAnswer[],
+): Promise<Store> {
+  return enqueueWrite(async () => {
+    await chrome.storage.local.set({ customAnswers })
+    return getStore()
+  })
+}
+
+export async function replaceStore(store: Store): Promise<Store> {
+  return enqueueWrite(async () => {
+    await chrome.storage.local.set({
+      schemaVersion: store.schemaVersion ?? CURRENT_SCHEMA_VERSION,
+      profile: store.profile,
+      formMappings: store.formMappings,
+      settings: {
+        autofillSites: store.settings.autofillSites,
+        highlightFilled: store.settings.highlightFilled,
+      },
+      customAnswers: store.customAnswers ?? [],
+    })
+    return getStore()
+  })
 }
 
 export function profileCompleteness(profile: Profile): {
@@ -82,9 +192,6 @@ export function profileCompleteness(profile: Profile): {
 } {
   const keys = Object.keys(EMPTY_PROFILE) as (keyof Profile)[]
   const filled = keys.filter((k) => String(profile[k] ?? '').trim() !== '').length
-  const ready =
-    Boolean(profile.firstName.trim()) &&
-    Boolean(profile.lastName.trim()) &&
-    Boolean(profile.email.trim())
+  const ready = REQUIRED_PROFILE_KEYS.every((k) => Boolean(String(profile[k]).trim()))
   return { filled, total: keys.length, ready }
 }

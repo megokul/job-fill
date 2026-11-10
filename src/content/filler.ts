@@ -1,10 +1,13 @@
-import type { FillResult } from '../shared/messages'
+import type { FilledField, FillResult } from '../shared/messages'
 import { mappingsForUrl } from '../shared/pathMatch'
+import { countryAliases, stateAliases } from '../shared/regions'
+import { resolveValue } from '../shared/resolveValue'
 import type {
+  CustomAnswer,
   FieldMapping,
+  FillKey,
   FormMapping,
   Profile,
-  ProfileKey,
   Settings,
 } from '../shared/types'
 import {
@@ -13,24 +16,32 @@ import {
   matchFields,
   type FieldSignals,
 } from './matcher'
+import { setHighlight, showHostToast } from './ui/host'
+import {
+  beginUndoSnapshot,
+  capturePrevious,
+  recordUndo,
+} from './undo'
 
-const HIGHLIGHT_CLASS = 'job-fill-highlighted'
-const HIGHLIGHT_STYLE_ID = 'job-fill-highlight-style'
+const CHECKBOX_KEYS = new Set<FillKey>(['workAuthorized', 'requiresSponsorship'])
 
 export function fillPage(
   profile: Profile,
   formMappings: FormMapping[],
   settings: Settings,
+  options?: {
+    isVisible?: (el: HTMLElement) => boolean
+    customAnswers?: CustomAnswer[]
+  },
 ): FillResult {
-  const result: FillResult = {
-    filled: 0,
-    fromMapping: 0,
-    fromHeuristic: 0,
-    skipped: 0,
-  }
+  beginUndoSnapshot()
 
-  const elements = collectFillableElements()
+  const filled: FilledField[] = []
+  let skippedNonEmpty = 0
   const filledElements = new Set<HTMLElement>()
+  const customAnswers = options?.customAnswers ?? []
+
+  const elements = collectFillableElements(document, options)
   const applicable = mappingsForUrl(formMappings, location.href)
 
   for (const mapping of applicable) {
@@ -38,15 +49,40 @@ export function fillPage(
       const el = resolveMappedElement(field, elements)
       if (!el || filledElements.has(el)) continue
       if (!isEmptyControl(el)) {
-        result.skipped++
+        skippedNonEmpty++
         continue
       }
-      const value = profile[field.profileKey]
+
+      if (field.customAnswerId) {
+        const answer = customAnswers.find((a) => a.id === field.customAnswerId)
+        if (!answer?.answer.trim()) continue
+        const previous = capturePrevious(el)
+        // Custom answers always fill as free text
+        if (setControlValue(el, answer.answer, 'howDidYouHear')) {
+          filledElements.add(el)
+          recordUndo({ element: el, fillKey: 'howDidYouHear', previous })
+          filled.push({
+            label: bestLabel(extractSignals(el)),
+            key: 'howDidYouHear',
+            source: 'custom',
+          })
+          if (settings.highlightFilled) highlight(el)
+        }
+        continue
+      }
+
+      if (!field.profileKey) continue
+      const value = resolveValue(profile, field.profileKey)
       if (!String(value ?? '').trim()) continue
+      const previous = capturePrevious(el)
       if (setControlValue(el, value, field.profileKey)) {
         filledElements.add(el)
-        result.filled++
-        result.fromMapping++
+        recordUndo({ element: el, fillKey: field.profileKey, previous })
+        filled.push({
+          label: bestLabel(extractSignals(el)),
+          key: field.profileKey,
+          source: 'mapping',
+        })
         if (settings.highlightFilled) highlight(el)
       }
     }
@@ -57,17 +93,44 @@ export function fillPage(
 
   for (const match of matches) {
     if (filledElements.has(match.element)) continue
-    const value = profile[match.profileKey]
+    const value = resolveValue(profile, match.fillKey)
     if (!String(value ?? '').trim()) continue
-    if (setControlValue(match.element, value, match.profileKey)) {
+    const previous = capturePrevious(match.element)
+    if (setControlValue(match.element, value, match.fillKey)) {
       filledElements.add(match.element)
-      result.filled++
-      result.fromHeuristic++
+      recordUndo({ element: match.element, fillKey: match.fillKey, previous })
+      filled.push({
+        label: bestLabel(match.signals),
+        key: match.fillKey,
+        source: 'heuristic',
+      })
       if (settings.highlightFilled) highlight(match.element)
     }
   }
 
-  return result
+  const unmatched = elements
+    .filter((el) => !filledElements.has(el) && isEmptyControl(el))
+    .map((el) => ({ label: bestLabel(extractSignals(el)) }))
+    .filter((u) => u.label)
+    .slice(0, 20)
+
+  return {
+    filled,
+    skippedNonEmpty,
+    unmatched,
+    frameUrl: typeof location !== 'undefined' ? location.href : '',
+  }
+}
+
+export function bestLabel(signals: FieldSignals): string {
+  return (
+    signals.label ||
+    signals.ariaLabel ||
+    signals.placeholder ||
+    signals.name ||
+    signals.id ||
+    ''
+  )
 }
 
 export function resolveMappedElement(
@@ -78,7 +141,6 @@ export function resolveMappedElement(
     try {
       const found = document.querySelector<HTMLElement>(field.selector)
       if (found && elements.includes(found)) return found
-      if (found) return found
     } catch {
       // invalid selector
     }
@@ -134,130 +196,182 @@ export function buildSelector(el: HTMLElement): string {
 export function setControlValue(
   el: HTMLElement,
   value: string,
-  profileKey: ProfileKey,
+  fillKey: FillKey,
 ): boolean {
   if (el instanceof HTMLSelectElement) {
-    return selectOption(el, value)
+    return selectOption(el, value, fillKey)
   }
 
   if (el instanceof HTMLInputElement) {
     const type = (el.type || 'text').toLowerCase()
     if (type === 'checkbox') {
-      const shouldCheck = toBoolean(value, profileKey)
+      if (!CHECKBOX_KEYS.has(fillKey)) return false
+      const shouldCheck = toBoolean(value)
       if (shouldCheck === null) return false
-      if (el.checked !== shouldCheck) {
-        el.checked = shouldCheck
-        dispatch(el)
-      }
-      return true
+      return setChecked(el, shouldCheck)
     }
     if (type === 'radio') {
-      return selectRadio(el, value, profileKey)
+      return selectRadio(el, value)
     }
   }
 
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-    el.focus()
-    el.value = value
-    dispatch(el)
+    setNativeValue(el, value)
     return true
   }
 
   return false
 }
 
-function selectOption(select: HTMLSelectElement, value: string): boolean {
+/** Exported for unit tests. */
+export function selectOptionForTest(
+  select: HTMLSelectElement,
+  value: string,
+  fillKey: FillKey = 'country',
+): boolean {
+  return selectOption(select, value, fillKey)
+}
+
+function selectOption(
+  select: HTMLSelectElement,
+  value: string,
+  fillKey: FillKey,
+): boolean {
   const normalized = value.trim().toLowerCase()
+  if (!normalized) return false
+
   const yesNo = normalized === 'yes' || normalized === 'no' ? normalized : null
 
   for (const opt of Array.from(select.options)) {
     const text = opt.text.trim().toLowerCase()
     const val = opt.value.trim().toLowerCase()
     if (val === normalized || text === normalized) {
-      select.value = opt.value
-      dispatch(select)
+      setNativeSelect(select, opt.value)
       return true
     }
-    if (yesNo) {
-      if (
-        (yesNo === 'yes' && /^(yes|y|true|1)$/i.test(opt.value + ' ' + opt.text)) ||
-        (yesNo === 'no' && /^(no|n|false|0)$/i.test(opt.value + ' ' + opt.text))
-      ) {
-        select.value = opt.value
-        dispatch(select)
+  }
+
+  if (yesNo) {
+    for (const opt of Array.from(select.options)) {
+      const text = opt.text.trim()
+      const val = opt.value.trim()
+      if (yesNo === 'yes' && (isYesToken(val) || isYesToken(text))) {
+        setNativeSelect(select, opt.value)
+        return true
+      }
+      if (yesNo === 'no' && (isNoToken(val) || isNoToken(text))) {
+        setNativeSelect(select, opt.value)
         return true
       }
     }
   }
 
-  // Partial text match
+  const aliases =
+    fillKey === 'state'
+      ? stateAliases(value)
+      : fillKey === 'country'
+        ? countryAliases(value)
+        : []
+  for (const alias of aliases) {
+    const a = alias.toLowerCase()
+    for (const opt of Array.from(select.options)) {
+      const text = opt.text.trim().toLowerCase()
+      const val = opt.value.trim().toLowerCase()
+      if (val === a || text === a) {
+        setNativeSelect(select, opt.value)
+        return true
+      }
+    }
+  }
+
+  const valueTokens = normalized.split(/\s+/).filter(Boolean)
   for (const opt of Array.from(select.options)) {
-    if (opt.text.toLowerCase().includes(normalized) && normalized.length >= 2) {
-      select.value = opt.value
-      dispatch(select)
+    const textTokens = opt.text.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (valueTokens.length === 0 || textTokens.length < valueTokens.length) continue
+    let prefix = true
+    for (let i = 0; i < valueTokens.length; i++) {
+      if (textTokens[i] !== valueTokens[i]) {
+        prefix = false
+        break
+      }
+    }
+    if (prefix) {
+      setNativeSelect(select, opt.value)
       return true
     }
   }
+
   return false
 }
 
-function selectRadio(
-  radio: HTMLInputElement,
-  value: string,
-  profileKey: ProfileKey,
-): boolean {
-  const name = radio.name
-  if (!name) return false
-  const group = document.querySelectorAll<HTMLInputElement>(
-    `input[type="radio"][name="${cssAttr(name)}"]`,
-  )
-  const bool = toBoolean(value, profileKey)
+function isYesToken(raw: string): boolean {
+  return /^(yes|y|true|1)$/i.test(raw.trim())
+}
+
+function isNoToken(raw: string): boolean {
+  return /^(no|n|false|0)$/i.test(raw.trim())
+}
+
+function selectRadio(radio: HTMLInputElement, value: string): boolean {
+  const group = getRadioGroupMembers(radio)
+  const bool = toBoolean(value)
   for (const r of group) {
-    const label = (extractSignals(r).label ?? '').toLowerCase()
+    const label = optionLabel(r).toLowerCase()
     const val = (r.value ?? '').toLowerCase()
-    if (bool === true && /^(yes|y|true|1)$/i.test(val)) {
-      r.checked = true
-      dispatch(r)
-      return true
+    if (bool === true && (isYesToken(val) || /\byes\b/.test(label))) {
+      return setChecked(r, true)
     }
-    if (bool === false && /^(no|n|false|0)$/i.test(val)) {
-      r.checked = true
-      dispatch(r)
-      return true
+    if (bool === false && (isNoToken(val) || /\bno\b/.test(label))) {
+      return setChecked(r, true)
     }
-    if (bool === true && /\byes\b/.test(label)) {
-      r.checked = true
-      dispatch(r)
-      return true
-    }
-    if (bool === false && /\bno\b/.test(label)) {
-      r.checked = true
-      dispatch(r)
-      return true
-    }
-    if (val === value.toLowerCase() || label.includes(value.toLowerCase())) {
-      r.checked = true
-      dispatch(r)
-      return true
+    if (val === value.toLowerCase() || label === value.toLowerCase()) {
+      return setChecked(r, true)
     }
   }
   return false
 }
 
-function toBoolean(value: string, profileKey: ProfileKey): boolean | null {
+function getRadioGroupMembers(radio: HTMLInputElement): HTMLInputElement[] {
+  const radiogroup = radio.closest('[role="radiogroup"]')
+  if (radiogroup) {
+    return Array.from(
+      radiogroup.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+    )
+  }
+  const name = radio.name
+  if (!name) return [radio]
+  const root = radio.form ?? document
+  return Array.from(
+    root.querySelectorAll<HTMLInputElement>(
+      `input[type="radio"][name="${cssAttr(name)}"]`,
+    ),
+  )
+}
+
+function optionLabel(r: HTMLInputElement): string {
+  if (r.id) {
+    const lab = document.querySelector(`label[for="${cssEscape(r.id)}"]`)
+    if (lab?.textContent) return lab.textContent.trim()
+  }
+  const wrap = r.closest('label')
+  if (wrap?.textContent) return wrap.textContent.trim()
+  return r.value
+}
+
+function toBoolean(value: string): boolean | null {
   const v = value.trim().toLowerCase()
   if (v === 'yes' || v === 'true' || v === '1' || v === 'y') return true
   if (v === 'no' || v === 'false' || v === '0' || v === 'n') return false
-  if (profileKey === 'workAuthorized' || profileKey === 'requiresSponsorship') {
-    return null
-  }
   return null
 }
 
-function isEmptyControl(el: HTMLElement): boolean {
+export function isEmptyControl(el: HTMLElement): boolean {
   if (el instanceof HTMLInputElement) {
     const type = (el.type || 'text').toLowerCase()
-    if (type === 'checkbox' || type === 'radio') return !el.checked
+    if (type === 'checkbox') return !el.checked
+    if (type === 'radio') {
+      return getRadioGroupMembers(el).every((r) => !r.checked)
+    }
     return el.value.trim() === ''
   }
   if (el instanceof HTMLTextAreaElement) return el.value.trim() === ''
@@ -292,29 +406,75 @@ function signalSimilarity(a: FieldSignals, b: FieldSignals): number {
   return score
 }
 
+function setNativeValue(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
+  const proto =
+    el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
+  const descriptor = Object.getOwnPropertyDescriptor(proto, 'value')
+  el.dispatchEvent(new Event('focus', { bubbles: true }))
+  if (descriptor?.set) {
+    descriptor.set.call(el, value)
+  } else {
+    el.value = value
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+  el.dispatchEvent(new Event('blur', { bubbles: true }))
+}
+
+function setNativeSelect(select: HTMLSelectElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
+  select.dispatchEvent(new Event('focus', { bubbles: true }))
+  if (descriptor?.set) {
+    descriptor.set.call(select, value)
+  } else {
+    select.value = value
+  }
+  select.dispatchEvent(new Event('input', { bubbles: true }))
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  select.dispatchEvent(new Event('blur', { bubbles: true }))
+}
+
+function setChecked(el: HTMLInputElement, checked: boolean): boolean {
+  if (el.checked === checked) {
+    dispatch(el)
+    return true
+  }
+  if (checked) {
+    el.click()
+    if (!el.checked) {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'checked',
+      )
+      if (descriptor?.set) descriptor.set.call(el, true)
+      else el.checked = true
+      dispatch(el)
+    }
+    return true
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'checked',
+  )
+  if (descriptor?.set) descriptor.set.call(el, false)
+  else el.checked = false
+  dispatch(el)
+  return true
+}
+
 function dispatch(el: HTMLElement): void {
   el.dispatchEvent(new Event('input', { bubbles: true }))
   el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
 function highlight(el: HTMLElement): void {
-  ensureHighlightStyle()
-  el.classList.add(HIGHLIGHT_CLASS)
-  window.setTimeout(() => el.classList.remove(HIGHLIGHT_CLASS), 1600)
-}
-
-function ensureHighlightStyle(): void {
-  if (document.getElementById(HIGHLIGHT_STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = HIGHLIGHT_STYLE_ID
-  style.textContent = `
-    .${HIGHLIGHT_CLASS} {
-      outline: 2px solid #0f766e !important;
-      outline-offset: 2px !important;
-      transition: outline-color 0.2s ease;
-    }
-  `
-  document.documentElement.appendChild(style)
+  const id = `filled-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  setHighlight(id, el, 'filled', 1600)
 }
 
 function cssEscape(value: string): string {
@@ -328,28 +488,9 @@ function cssAttr(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-export function showToast(message: string): void {
-  const existing = document.getElementById('job-fill-toast')
-  if (existing) existing.remove()
-
-  const toast = document.createElement('div')
-  toast.id = 'job-fill-toast'
-  toast.textContent = message
-  Object.assign(toast.style, {
-    position: 'fixed',
-    zIndex: '2147483646',
-    right: '16px',
-    bottom: '16px',
-    maxWidth: '360px',
-    padding: '12px 16px',
-    borderRadius: '10px',
-    background: '#0f172a',
-    color: '#f8fafc',
-    fontFamily: 'system-ui, sans-serif',
-    fontSize: '13px',
-    lineHeight: '1.4',
-    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.35)',
-  })
-  document.documentElement.appendChild(toast)
-  window.setTimeout(() => toast.remove(), 3200)
+export function showToast(
+  message: string,
+  actions?: { label: string; onClick: () => void }[],
+): void {
+  showHostToast(message, actions)
 }

@@ -1,16 +1,27 @@
-import { normalizeText, SYNONYMS } from '../shared/synonyms'
-import type { FieldMatchSignals, ProfileKey } from '../shared/types'
+import { autocompleteToFillKey, inputTypeBoost } from '../shared/autocomplete'
+import {
+  FILL_KEYS,
+  hasNegativeContext,
+  normalizeText,
+  splitIdentifier,
+  SYNONYMS,
+} from '../shared/synonyms'
+import type { FieldMatchSignals, FillKey } from '../shared/types'
 
 export type FieldSignals = FieldMatchSignals & {
   ariaLabel?: string
+  inputType?: string
 }
 
 export type MatchCandidate = {
   element: HTMLElement
   signals: FieldSignals
-  profileKey: ProfileKey
+  fillKey: FillKey
   score: number
 }
+
+/** @deprecated use fillKey */
+export type MatchCandidateLegacy = MatchCandidate & { profileKey: FillKey }
 
 const SKIP_TYPES = new Set([
   'password',
@@ -26,30 +37,70 @@ const SKIP_TYPES = new Set([
 
 const CONFIDENCE_THRESHOLD = 40
 
+export type VisibilityFn = (el: HTMLElement) => boolean
+
 export function collectFillableElements(
   root: ParentNode = document,
+  options?: { isVisible?: VisibilityFn },
 ): HTMLElement[] {
-  const nodes = root.querySelectorAll<HTMLElement>('input, textarea, select')
+  const visible = options?.isVisible ?? isVisible
+  const nodes = queryAllDeep(root, 'input, textarea, select')
   const result: HTMLElement[] = []
+  const seenRadioGroups = new Set<string>()
+
   for (const el of nodes) {
     if (el instanceof HTMLInputElement) {
       const type = (el.type || 'text').toLowerCase()
       if (SKIP_TYPES.has(type)) continue
       if (el.disabled || el.readOnly) continue
+      if (type === 'radio') {
+        const groupKey = radioGroupKey(el)
+        if (seenRadioGroups.has(groupKey)) continue
+        seenRadioGroups.add(groupKey)
+      }
     } else if (el instanceof HTMLTextAreaElement) {
       if (el.disabled || el.readOnly) continue
     } else if (el instanceof HTMLSelectElement) {
       if (el.disabled) continue
     }
-    if (!isVisible(el)) continue
+    if (!visible(el)) continue
     result.push(el)
   }
   return result
 }
 
+/** Query selector including open shadow roots. */
+export function queryAllDeep(
+  root: ParentNode,
+  selector: string,
+): HTMLElement[] {
+  const out: HTMLElement[] = []
+  const visit = (node: ParentNode) => {
+    if ('querySelectorAll' in node) {
+      node.querySelectorAll<HTMLElement>(selector).forEach((el) => out.push(el))
+      node.querySelectorAll<HTMLElement>('*').forEach((el) => {
+        if (el.shadowRoot) visit(el.shadowRoot)
+      })
+    }
+  }
+  visit(root)
+  return out
+}
+
+function radioGroupKey(el: HTMLInputElement): string {
+  const formId = el.form?.id ?? el.closest('form')?.id ?? 'nofrm'
+  const radiogroup = el.closest('[role="radiogroup"]')
+  if (radiogroup) {
+    return `rg:${formId}:${radiogroup.id || radiogroup.getAttribute('aria-labelledby') || radiogroup.outerHTML.length}`
+  }
+  return `name:${formId}:${el.name || el.id}`
+}
+
 export function extractSignals(el: HTMLElement): FieldSignals {
   const input = el as HTMLInputElement
-  const label = getAssociatedLabelText(el)
+  const isRadio = el instanceof HTMLInputElement && el.type === 'radio'
+  const label = isRadio ? getRadioGroupQuestion(el) : getAssociatedLabelText(el)
+  const group = getGroupContext(el)
   return {
     name: input.name || undefined,
     id: el.id || undefined,
@@ -58,56 +109,68 @@ export function extractSignals(el: HTMLElement): FieldSignals {
     autocomplete:
       'autocomplete' in input ? input.autocomplete || undefined : undefined,
     ariaLabel: el.getAttribute('aria-label') || undefined,
+    group: group || undefined,
+    inputType: el instanceof HTMLInputElement ? el.type : undefined,
   }
 }
 
-export function scoreField(
-  signals: FieldSignals,
-  profileKey: ProfileKey,
-): number {
-  const synonyms = SYNONYMS[profileKey]
-  const haystacks = [
-    signals.label,
-    signals.ariaLabel,
-    signals.placeholder,
-    signals.name,
-    signals.id,
-    signals.autocomplete,
-  ]
-    .filter(Boolean)
-    .map((s) => normalizeText(String(s)))
+export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
+  if (
+    hasNegativeContext(signals.label, signals.ariaLabel, signals.group) &&
+    isBlockedByNegativeContext(fillKey, signals)
+  ) {
+    return 0
+  }
 
-  if (haystacks.length === 0) return 0
+  const autoKey = autocompleteToFillKey(signals.autocomplete)
+  if (autoKey) {
+    return autoKey === fillKey
+      ? 200 + inputTypeBoost(signals.inputType, fillKey)
+      : 0
+  }
+
+  const synonyms = SYNONYMS[fillKey]
+  const labelHay = signals.label ? normalizeText(signals.label) : ''
+  const ariaHay = signals.ariaLabel ? normalizeText(signals.ariaLabel) : ''
+  const placeholderHay = signals.placeholder
+    ? normalizeText(signals.placeholder)
+    : ''
+  const nameHay = signals.name
+    ? normalizeText(splitIdentifier(signals.name))
+    : ''
+  const idHay = signals.id ? normalizeText(splitIdentifier(signals.id)) : ''
+
+  const haystacks: Array<{ hay: string; kind: 'label' | 'aria' | 'other' }> = []
+  if (labelHay) haystacks.push({ hay: labelHay, kind: 'label' })
+  if (ariaHay) haystacks.push({ hay: ariaHay, kind: 'aria' })
+  if (placeholderHay) haystacks.push({ hay: placeholderHay, kind: 'other' })
+  if (nameHay) haystacks.push({ hay: nameHay, kind: 'other' })
+  if (idHay) haystacks.push({ hay: idHay, kind: 'other' })
+
+  if (haystacks.length === 0) {
+    return inputTypeBoost(signals.inputType, fillKey)
+  }
 
   let best = 0
   for (const synonym of synonyms) {
     const needle = normalizeText(synonym)
     if (!needle) continue
+    const needleTokens = needle.split(' ').filter(Boolean)
 
-    for (const hay of haystacks) {
-      if (!hay) continue
+    for (const { hay, kind } of haystacks) {
       let score = 0
       if (hay === needle) {
+        // bare "name" is exact-match only for fullName (synonym list)
         score = 100 + needle.length
-      } else if (hay.includes(needle)) {
+      } else if (hasConsecutiveTokens(hay, needleTokens)) {
         score = 70 + needle.length
-        // Prefer label/aria over name/id slightly
-        if (hay === normalizeText(signals.label ?? '')) score += 8
-        if (hay === normalizeText(signals.ariaLabel ?? '')) score += 6
+        if (kind === 'label') score += 8
+        if (kind === 'aria') score += 6
       } else if (tokenOverlap(hay, needle) >= 0.7 && needle.length >= 4) {
         score = 45 + needle.length / 2
       }
 
-      // Penalize ambiguous bare "name" matching first/last incorrectly
-      if (
-        (profileKey === 'firstName' || profileKey === 'lastName') &&
-        (hay === 'name' || hay === 'full name')
-      ) {
-        score = Math.min(score, 20)
-      }
-
-      // Prefer address line 2 phrases over generic address
-      if (profileKey === 'addressLine1' && /line 2|address2|apt|suite|unit/.test(hay)) {
+      if (fillKey === 'addressLine1' && /line 2|address 2|apt|suite|unit/.test(hay)) {
         score = 0
       }
 
@@ -115,6 +178,7 @@ export function scoreField(
     }
   }
 
+  best += inputTypeBoost(signals.inputType, fillKey)
   return best
 }
 
@@ -123,10 +187,10 @@ export function matchFields(elements: HTMLElement[]): MatchCandidate[] {
 
   for (const el of elements) {
     const signals = extractSignals(el)
-    let bestKey: ProfileKey | null = null
+    let bestKey: FillKey | null = null
     let bestScore = 0
 
-    for (const key of Object.keys(SYNONYMS) as ProfileKey[]) {
+    for (const key of FILL_KEYS) {
       const score = scoreField(signals, key)
       if (score > bestScore) {
         bestScore = score
@@ -135,25 +199,51 @@ export function matchFields(elements: HTMLElement[]): MatchCandidate[] {
     }
 
     if (bestKey && bestScore >= CONFIDENCE_THRESHOLD) {
-      scored.push({ element: el, signals, profileKey: bestKey, score: bestScore })
+      scored.push({ element: el, signals, fillKey: bestKey, score: bestScore })
     }
   }
 
-  // Keep best unique element per profileKey (highest score wins)
   scored.sort((a, b) => b.score - a.score)
-  const usedKeys = new Set<ProfileKey>()
+  const usedKeys = new Set<FillKey>()
   const usedEls = new Set<HTMLElement>()
   const unique: MatchCandidate[] = []
 
   for (const candidate of scored) {
-    if (usedKeys.has(candidate.profileKey)) continue
+    if (usedKeys.has(candidate.fillKey)) continue
     if (usedEls.has(candidate.element)) continue
-    usedKeys.add(candidate.profileKey)
+    usedKeys.add(candidate.fillKey)
     usedEls.add(candidate.element)
     unique.push(candidate)
   }
 
   return unique
+}
+
+function isBlockedByNegativeContext(key: FillKey, signals: FieldSignals): boolean {
+  if (key === 'currentCompany' || key === 'currentTitle') {
+    const text = normalizeText(
+      [signals.label, signals.ariaLabel, signals.group].filter(Boolean).join(' '),
+    )
+    if (/\b(current|present)\b/.test(text)) return false
+  }
+  return true
+}
+
+function hasConsecutiveTokens(hay: string, needleTokens: string[]): boolean {
+  if (needleTokens.length === 0) return false
+  const hayTokens = hay.split(' ').filter(Boolean)
+  if (needleTokens.length > hayTokens.length) return false
+  for (let i = 0; i <= hayTokens.length - needleTokens.length; i++) {
+    let ok = true
+    for (let j = 0; j < needleTokens.length; j++) {
+      if (hayTokens[i + j] !== needleTokens[j]) {
+        ok = false
+        break
+      }
+    }
+    if (ok) return true
+  }
+  return false
 }
 
 function tokenOverlap(a: string, b: string): number {
@@ -162,6 +252,47 @@ function tokenOverlap(a: string, b: string): number {
   if (bt.length === 0) return 0
   const hit = bt.filter((t) => at.has(t)).length
   return hit / bt.length
+}
+
+function getRadioGroupQuestion(el: HTMLInputElement): string {
+  const group = el.closest('[role="radiogroup"]')
+  if (group) {
+    const labelledBy = group.getAttribute('aria-labelledby')
+    if (labelledBy) {
+      const parts = labelledBy
+        .split(/\s+/)
+        .map((id) => document.getElementById(id)?.textContent ?? '')
+      const text = parts.join(' ').replace(/\s+/g, ' ').trim()
+      if (text) return text
+    }
+    const aria = group.getAttribute('aria-label')
+    if (aria) return aria
+  }
+
+  const fieldset = el.closest('fieldset')
+  const legend = fieldset?.querySelector('legend')
+  if (legend?.textContent?.trim()) return legend.textContent.trim()
+
+  return getAssociatedLabelText(el)
+}
+
+function getGroupContext(el: HTMLElement): string {
+  const fieldset = el.closest('fieldset')
+  const legend = fieldset?.querySelector('legend')
+  if (legend?.textContent?.trim()) return legend.textContent.trim()
+
+  const section = el.closest('section, [role="group"]')
+  const heading = section?.querySelector('h1,h2,h3,h4,h5,h6,legend')
+  if (heading?.textContent?.trim()) return heading.textContent.trim()
+
+  let prev = el.parentElement?.previousElementSibling
+  for (let i = 0; i < 3 && prev; i++) {
+    if (/^H[1-6]$/.test(prev.tagName)) {
+      return (prev.textContent ?? '').trim()
+    }
+    prev = prev.previousElementSibling
+  }
+  return ''
 }
 
 function getAssociatedLabelText(el: HTMLElement): string {
@@ -183,7 +314,6 @@ function getAssociatedLabelText(el: HTMLElement): string {
     }
   }
 
-  // Nearby preceding label-like text (common in custom forms)
   const prev = el.previousElementSibling
   if (prev && (prev.tagName === 'LABEL' || prev.tagName === 'SPAN' || prev.tagName === 'DIV')) {
     const text = (prev.textContent ?? '').trim()

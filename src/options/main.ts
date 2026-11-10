@@ -1,7 +1,12 @@
 import {
-  deleteFieldMapping,
+  datalistCountryOptions,
+  datalistStateOptions,
+} from '../shared/regions'
+import {
   deleteFormMapping,
   getStore,
+  replaceStore,
+  saveCustomAnswers,
   saveFormMapping,
   saveProfile,
   saveSettings,
@@ -10,303 +15,692 @@ import {
   EMPTY_PROFILE,
   PROFILE_KEYS,
   PROFILE_LABELS,
+  type CustomAnswer,
   type FormMapping,
   type Profile,
   type ProfileKey,
-  type Settings,
   type Store,
   type YesNo,
 } from '../shared/types'
+import { parseBackup } from '../shared/validate'
+import {
+  suggestHttps,
+  validateProfileField,
+} from '../shared/profileValidation'
+import { clear, h } from '../ui/dom'
 
-const profileForm = document.getElementById('profile-form')!
-const saveProfileBtn = document.getElementById('save-profile')!
-const resetProfileBtn = document.getElementById('reset-profile')!
-const profileStatus = document.getElementById('profile-status')!
-const autofillOnLoad = document.getElementById('autofill-on-load') as HTMLInputElement
-const highlightFilled = document.getElementById('highlight-filled') as HTMLInputElement
-const saveSettingsBtn = document.getElementById('save-settings')!
-const settingsStatus = document.getElementById('settings-status')!
-const mappingsList = document.getElementById('mappings-list')!
-const mappingsStatus = document.getElementById('mappings-status')!
-const exportBtn = document.getElementById('export-btn')!
-const importInput = document.getElementById('import-input') as HTMLInputElement
+const YES_NO = new Set<ProfileKey>(['workAuthorized', 'requiresSponsorship'])
+const URL_KEYS = new Set<ProfileKey>(['linkedinUrl', 'portfolioUrl', 'githubUrl'])
 
-const YES_NO_KEYS = new Set<ProfileKey>(['workAuthorized', 'requiresSponsorship'])
-const FULL_WIDTH = new Set<ProfileKey>([
-  'addressLine1',
-  'addressLine2',
-  'linkedinUrl',
-  'portfolioUrl',
-])
+const GROUPS: { title: string; keys: ProfileKey[] }[] = [
+  {
+    title: 'Identity',
+    keys: ['firstName', 'lastName', 'preferredName', 'pronouns'],
+  },
+  { title: 'Contact', keys: ['email', 'phone'] },
+  {
+    title: 'Address',
+    keys: [
+      'addressLine1',
+      'addressLine2',
+      'city',
+      'state',
+      'postalCode',
+      'country',
+    ],
+  },
+  { title: 'Links', keys: ['linkedinUrl', 'portfolioUrl', 'githubUrl'] },
+  {
+    title: 'Work eligibility',
+    keys: ['workAuthorized', 'requiresSponsorship'],
+  },
+  {
+    title: 'Role and compensation',
+    keys: [
+      'currentCompany',
+      'currentTitle',
+      'yearsExperience',
+      'noticePeriod',
+      'howDidYouHear',
+      'salaryExpectation',
+    ],
+  },
+]
+
+let store: Store
+let saveTimer: number | undefined
+let deletedMapping: FormMapping | null = null
+let deletedTimer: number | undefined
 
 void init()
 
 async function init(): Promise<void> {
-  buildProfileFields()
-  const store = await getStore()
-  fillProfileForm(store.profile)
-  fillSettings(store.settings)
-  renderMappings(store.formMappings)
-
-  saveProfileBtn.addEventListener('click', () => {
-    void onSaveProfile()
-  })
-  resetProfileBtn.addEventListener('click', () => {
-    fillProfileForm(EMPTY_PROFILE)
-    profileStatus.textContent = 'Form reset (not saved yet).'
-  })
-  saveSettingsBtn.addEventListener('click', () => {
-    void onSaveSettings()
-  })
-  exportBtn.addEventListener('click', () => {
-    void onExport()
-  })
-  importInput.addEventListener('change', () => {
-    void onImport()
+  store = await getStore()
+  wireNav()
+  renderAll()
+  showSection(location.hash.replace('#', '') || 'profile')
+  window.addEventListener('hashchange', () => {
+    showSection(location.hash.replace('#', '') || 'profile')
   })
 }
 
-function buildProfileFields(): void {
-  profileForm.innerHTML = PROFILE_KEYS.map((key) => {
-    const label = PROFILE_LABELS[key]
-    const full = FULL_WIDTH.has(key) ? ' full' : ''
-    if (YES_NO_KEYS.has(key)) {
-      return `
-        <div class="field${full}">
-          <label for="field-${key}">${label}</label>
-          <select id="field-${key}" name="${key}">
-            <option value="">—</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        </div>`
+function wireNav(): void {
+  document.querySelectorAll<HTMLAnchorElement>('[data-nav]').forEach((a) => {
+    a.addEventListener('click', () => {
+      document.querySelectorAll('[data-nav]').forEach((x) => x.classList.remove('active'))
+      a.classList.add('active')
+    })
+  })
+}
+
+function showSection(id: string): void {
+  for (const panel of document.querySelectorAll<HTMLElement>('.panel')) {
+    panel.hidden = panel.id !== id
+  }
+  document.querySelectorAll('[data-nav]').forEach((a) => {
+    a.classList.toggle('active', a.getAttribute('data-nav') === id)
+  })
+}
+
+function renderAll(): void {
+  renderProfile()
+  renderAnswers()
+  renderSites()
+  renderSettings()
+  renderBackup()
+}
+
+function renderProfile(): void {
+  const root = document.getElementById('profile')!
+  clear(root)
+  const filled = PROFILE_KEYS.filter((k) => String(store.profile[k]).trim()).length
+  const pct = Math.round((filled / PROFILE_KEYS.length) * 100)
+  const saved = h('span', { className: 'saved', id: 'profile-saved' }, '')
+
+  root.append(
+    h(
+      'div',
+      { className: 'panel-head' },
+      h('h1', null, 'Profile'),
+      saved,
+    ),
+    h('div', null, `Completeness ${filled}/${PROFILE_KEYS.length}`),
+    h('div', { className: 'progress' }, h('span', { style: { width: `${pct}%` } })),
+  )
+
+  for (const group of GROUPS) {
+    const fs = h('fieldset', { className: 'fieldset' }, h('legend', null, group.title))
+    const grid = h('div', { className: 'grid' })
+    for (const key of group.keys) {
+      grid.append(profileField(key))
     }
-    const inputType =
-      key === 'email' ? 'email' : key.endsWith('Url') ? 'url' : key === 'phone' ? 'tel' : 'text'
-    return `
-      <div class="field${full}">
-        <label for="field-${key}">${label}</label>
-        <input id="field-${key}" name="${key}" type="${inputType}" autocomplete="off" />
-      </div>`
-  }).join('')
+    fs.append(grid)
+    root.append(fs)
+  }
+
+  // datalists
+  root.append(
+    h(
+      'datalist',
+      { id: 'states-list' },
+      ...datalistStateOptions().map((v) => h('option', { value: v })),
+    ),
+    h(
+      'datalist',
+      { id: 'countries-list' },
+      ...datalistCountryOptions().map((v) => h('option', { value: v })),
+    ),
+  )
 }
 
-function fillProfileForm(profile: Profile): void {
+function profileField(key: ProfileKey): HTMLElement {
+  const label = h('label', { htmlFor: `f-${key}` }, PROFILE_LABELS[key])
+  const error = h('div', { className: 'error', id: `err-${key}` })
+  let input: HTMLInputElement | HTMLSelectElement
+
+  if (YES_NO.has(key)) {
+    input = h(
+      'select',
+      { id: `f-${key}`, name: key },
+      h('option', { value: '' }, '—'),
+      h('option', { value: 'yes' }, 'Yes'),
+      h('option', { value: 'no' }, 'No'),
+    ) as HTMLSelectElement
+    input.value = store.profile[key]
+  } else {
+    const type =
+      key === 'email' ? 'email' : URL_KEYS.has(key) ? 'url' : key === 'phone' ? 'tel' : 'text'
+    const autocomplete =
+      key === 'firstName'
+        ? 'given-name'
+        : key === 'lastName'
+          ? 'family-name'
+          : key === 'email'
+            ? 'email'
+            : key === 'phone'
+              ? 'tel'
+              : key === 'city'
+                ? 'address-level2'
+                : key === 'state'
+                  ? 'address-level1'
+                  : key === 'postalCode'
+                    ? 'postal-code'
+                    : key === 'country'
+                      ? 'country-name'
+                      : 'off'
+    input = h('input', {
+      id: `f-${key}`,
+      name: key,
+      type,
+      value: store.profile[key],
+      autocomplete,
+      list:
+        key === 'state' ? 'states-list' : key === 'country' ? 'countries-list' : undefined,
+    }) as HTMLInputElement
+  }
+
+  const onChange = () => {
+    const value = input.value
+    const message = validateProfileField(key, value)
+    error.textContent = message ?? ''
+    if (message && URL_KEYS.has(key)) {
+      const suggestion = suggestHttps(value)
+      if (suggestion) {
+        error.textContent = `${message} `
+        const fix = h('button', { type: 'button', className: 'btn' }, 'Use https://')
+        fix.addEventListener('click', () => {
+          input.value = suggestion
+          error.textContent = ''
+          queueProfileSave()
+        })
+        error.append(fix)
+      }
+      return
+    }
+    if (!message) queueProfileSave()
+  }
+
+  input.addEventListener('blur', onChange)
+  input.addEventListener('input', () => {
+    window.clearTimeout(saveTimer)
+    saveTimer = window.setTimeout(onChange, 600)
+  })
+
+  return h(
+    'div',
+    { className: `field${URL_KEYS.has(key) || key.startsWith('address') ? ' full' : ''}` },
+    label,
+    input,
+    error,
+  )
+}
+
+function queueProfileSave(): void {
+  const profile = readProfile()
+  const invalid = PROFILE_KEYS.some((k) => validateProfileField(k, String(profile[k])))
+  if (invalid) return
+  void (async () => {
+    store = await saveProfile(profile)
+    const el = document.getElementById('profile-saved')
+    if (el) {
+      el.textContent = `Saved ✓ ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    }
+    renderProfile()
+  })()
+}
+
+function readProfile(): Profile {
+  const profile = { ...EMPTY_PROFILE }
   for (const key of PROFILE_KEYS) {
-    const el = document.getElementById(`field-${key}`) as
+    const el = document.getElementById(`f-${key}`) as
       | HTMLInputElement
       | HTMLSelectElement
       | null
-    if (el) el.value = profile[key] ?? ''
-  }
-}
-
-function readProfileForm(): Profile {
-  const get = (key: ProfileKey): string => {
-    const el = document.getElementById(`field-${key}`) as
-      | HTMLInputElement
-      | HTMLSelectElement
-    return el.value.trim()
-  }
-
-  const yesNo = (key: ProfileKey): YesNo => {
-    const value = get(key)
-    return value === 'yes' || value === 'no' ? value : ''
-  }
-
-  return {
-    firstName: get('firstName'),
-    lastName: get('lastName'),
-    email: get('email'),
-    phone: get('phone'),
-    addressLine1: get('addressLine1'),
-    addressLine2: get('addressLine2'),
-    city: get('city'),
-    state: get('state'),
-    postalCode: get('postalCode'),
-    country: get('country'),
-    linkedinUrl: get('linkedinUrl'),
-    portfolioUrl: get('portfolioUrl'),
-    workAuthorized: yesNo('workAuthorized'),
-    requiresSponsorship: yesNo('requiresSponsorship'),
-    salaryExpectation: get('salaryExpectation'),
-  }
-}
-
-function fillSettings(settings: Settings): void {
-  autofillOnLoad.checked = settings.autofillOnLoad
-  highlightFilled.checked = settings.highlightFilled
-}
-
-async function onSaveProfile(): Promise<void> {
-  const profile = readProfileForm()
-  if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
-    profileStatus.textContent = 'Email looks invalid.'
-    return
-  }
-  for (const key of ['linkedinUrl', 'portfolioUrl'] as const) {
-    const value = profile[key]
-    if (value && !/^https?:\/\//i.test(value)) {
-      profileStatus.textContent = `${PROFILE_LABELS[key]} should start with http(s)://`
-      return
+    if (!el) continue
+    const value = el.value.trim()
+    if (YES_NO.has(key)) {
+      ;(profile as Record<string, YesNo>)[key] =
+        value === 'yes' || value === 'no' ? value : ''
+    } else {
+      ;(profile as Record<string, string>)[key] = value
     }
   }
-  await saveProfile(profile)
-  profileStatus.textContent = 'Profile saved.'
+  return profile
 }
 
-async function onSaveSettings(): Promise<void> {
-  await saveSettings({
-    autofillOnLoad: autofillOnLoad.checked,
-    highlightFilled: highlightFilled.checked,
-  })
-  settingsStatus.textContent = 'Settings saved.'
-}
+function renderAnswers(): void {
+  const root = document.getElementById('answers')!
+  clear(root)
+  root.append(
+    h('div', { className: 'panel-head' }, h('h1', null, 'Answers')),
+    h(
+      'p',
+      { className: 'muted' },
+      'Custom answers are used only on fields you map them to — never by heuristic fill.',
+    ),
+    h(
+      'button',
+      {
+        className: 'btn primary',
+        type: 'button',
+        onClick: () => {
+          const next: CustomAnswer = {
+            id: crypto.randomUUID(),
+            question: '',
+            answer: '',
+            updatedAt: Date.now(),
+          }
+          store.customAnswers = [...store.customAnswers, next]
+          renderAnswers()
+        },
+      },
+      'Add answer',
+    ),
+  )
 
-function renderMappings(mappings: FormMapping[]): void {
-  if (mappings.length === 0) {
-    mappingsList.innerHTML =
-      '<p class="empty">No saved mappings yet. Open a job form, then use Map this form from the popup.</p>'
-    return
-  }
-
-  const sorted = [...mappings].sort((a, b) => b.updatedAt - a.updatedAt)
-  mappingsList.innerHTML = sorted
-    .map((m) => {
-      const fields = m.fields
-        .map(
-          (f) => `
-          <li>
-            <span><strong>${escapeHtml(PROFILE_LABELS[f.profileKey])}</strong>
-              <span style="color:#64748b"> — ${escapeHtml(f.match.label || f.match.name || f.selector || '')}</span>
-            </span>
-            <button type="button" class="btn danger" data-del-field data-form="${m.id}" data-field="${f.id}">Remove</button>
-          </li>`,
-        )
-        .join('')
-
-      return `
-        <article class="mapping" data-id="${m.id}">
-          <div class="mapping-head">
-            <div>
-              <h3>${escapeHtml(m.name)}</h3>
-              <p class="meta">${escapeHtml(m.origin)}${escapeHtml(m.pathPattern)}</p>
-            </div>
-            <button type="button" class="btn danger" data-del-form="${m.id}">Delete</button>
-          </div>
-          <div class="mapping-edit">
-            <input data-edit-name="${m.id}" value="${escapeAttr(m.name)}" aria-label="Mapping name" />
-            <input data-edit-path="${m.id}" value="${escapeAttr(m.pathPattern)}" aria-label="Path pattern" />
-            <button type="button" class="btn" data-save-meta="${m.id}">Update</button>
-          </div>
-          <ul class="mapping-fields">${fields || '<li>No fields</li>'}</ul>
-        </article>`
-    })
-    .join('')
-
-  mappingsList.querySelectorAll('[data-del-form]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = (btn as HTMLElement).dataset.delForm!
-      void (async () => {
-        const store = await deleteFormMapping(id)
-        renderMappings(store.formMappings)
-        mappingsStatus.textContent = 'Mapping deleted.'
-      })()
-    })
-  })
-
-  mappingsList.querySelectorAll('[data-del-field]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const el = btn as HTMLElement
-      void (async () => {
-        const store = await deleteFieldMapping(el.dataset.form!, el.dataset.field!)
-        renderMappings(store.formMappings)
-        mappingsStatus.textContent = 'Field mapping removed.'
-      })()
-    })
-  })
-
-  mappingsList.querySelectorAll('[data-save-meta]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = (btn as HTMLElement).dataset.saveMeta!
-      void (async () => {
-        const store = await getStore()
-        const mapping = store.formMappings.find((m) => m.id === id)
-        if (!mapping) return
-        const nameInput = mappingsList.querySelector(
-          `[data-edit-name="${id}"]`,
-        ) as HTMLInputElement
-        const pathInput = mappingsList.querySelector(
-          `[data-edit-path="${id}"]`,
-        ) as HTMLInputElement
-        const next: FormMapping = {
-          ...mapping,
-          name: nameInput.value.trim() || mapping.name,
-          pathPattern: pathInput.value.trim() || '/',
-          updatedAt: Date.now(),
-        }
-        const updated = await saveFormMapping(next)
-        renderMappings(updated.formMappings)
-        mappingsStatus.textContent = 'Mapping updated.'
-      })()
-    })
-  })
-}
-
-async function onExport(): Promise<void> {
-  const store = await getStore()
-  const blob = new Blob([JSON.stringify(store, null, 2)], {
-    type: 'application/json',
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `job-fill-backup-${new Date().toISOString().slice(0, 10)}.json`
-  a.click()
-  URL.revokeObjectURL(url)
-  mappingsStatus.textContent = 'Exported.'
-}
-
-async function onImport(): Promise<void> {
-  const file = importInput.files?.[0]
-  if (!file) return
-  try {
-    const text = await file.text()
-    const parsed = JSON.parse(text) as Partial<Store>
-    if (parsed.profile) await saveProfile({ ...EMPTY_PROFILE, ...parsed.profile })
-    if (parsed.settings) {
-      await saveSettings({
-        autofillOnLoad: Boolean(parsed.settings.autofillOnLoad),
-        highlightFilled: parsed.settings.highlightFilled !== false,
+  for (const answer of store.customAnswers) {
+    const q = h('input', {
+      value: answer.question,
+      placeholder: 'Question label',
+    }) as HTMLInputElement
+    const a = h('textarea', {
+      placeholder: 'Your answer',
+    }) as HTMLTextAreaElement
+    a.value = answer.answer
+    const save = () => {
+      answer.question = q.value.trim()
+      answer.answer = a.value
+      answer.updatedAt = Date.now()
+      void saveCustomAnswers(store.customAnswers).then((s) => {
+        store = s
       })
     }
-    if (Array.isArray(parsed.formMappings)) {
-      for (const mapping of parsed.formMappings) {
-        if (mapping?.id && mapping?.origin && Array.isArray(mapping.fields)) {
-          await saveFormMapping(mapping as FormMapping)
-        }
-      }
-    }
-    const store = await getStore()
-    fillProfileForm(store.profile)
-    fillSettings(store.settings)
-    renderMappings(store.formMappings)
-    mappingsStatus.textContent = 'Import complete.'
-  } catch {
-    mappingsStatus.textContent = 'Import failed — invalid JSON.'
-  } finally {
-    importInput.value = ''
+    q.addEventListener('blur', save)
+    a.addEventListener('blur', save)
+    root.append(
+      h(
+        'div',
+        { className: 'card' },
+        h('div', { className: 'field' }, h('label', null, 'Question'), q),
+        h('div', { className: 'field' }, h('label', null, 'Answer'), a),
+        h(
+          'button',
+          {
+            className: 'btn danger',
+            type: 'button',
+            onClick: () => {
+              store.customAnswers = store.customAnswers.filter((x) => x.id !== answer.id)
+              void saveCustomAnswers(store.customAnswers).then((s) => {
+                store = s
+                renderAnswers()
+              })
+            },
+          },
+          'Delete',
+        ),
+      ),
+    )
   }
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+function renderSites(): void {
+  const root = document.getElementById('sites')!
+  clear(root)
+  root.append(h('div', { className: 'panel-head' }, h('h1', null, 'Sites')))
+
+  if (deletedMapping) {
+    root.append(
+      h(
+        'div',
+        { className: 'undo-bar' },
+        h('span', null, `Deleted “${deletedMapping.name}”`),
+        h(
+          'button',
+          {
+            className: 'btn',
+            type: 'button',
+            onClick: () => {
+              void saveFormMapping(deletedMapping!).then((s) => {
+                store = s
+                deletedMapping = null
+                renderSites()
+              })
+            },
+          },
+          'Undo',
+        ),
+      ),
+    )
+  }
+
+  const search = h('input', {
+    className: 'search btn',
+    placeholder: 'Search sites…',
+  }) as HTMLInputElement
+  root.append(search)
+  const list = h('div', { id: 'sites-list' })
+  root.append(list)
+
+  const paint = () => {
+    clear(list)
+    const q = search.value.trim().toLowerCase()
+    const mappings = store.formMappings
+      .filter(
+        (m) =>
+          !q ||
+          m.name.toLowerCase().includes(q) ||
+          m.origin.toLowerCase().includes(q),
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+
+    if (mappings.length === 0) {
+      list.append(
+        h(
+          'p',
+          { className: 'muted' },
+          'No saved mappings yet. Open a job form, then use Map this form from the popup.',
+        ),
+      )
+      return
+    }
+
+    for (const m of mappings) {
+      const autofillOn = store.settings.autofillSites.includes(m.origin)
+      const toggle = h('input', {
+        type: 'checkbox',
+        checked: autofillOn,
+      }) as HTMLInputElement
+      toggle.addEventListener('change', () => {
+        const sites = new Set(store.settings.autofillSites)
+        if (toggle.checked) sites.add(m.origin)
+        else sites.delete(m.origin)
+        void saveSettings({
+          autofillSites: [...sites],
+          highlightFilled: store.settings.highlightFilled,
+        }).then((s) => {
+          store = s
+        })
+      })
+
+      const nameInput = h('input', { value: m.name }) as HTMLInputElement
+      const pathInput = h('input', { value: m.pathPattern }) as HTMLInputElement
+      list.append(
+        h(
+          'details',
+          { className: 'card' },
+          h(
+            'summary',
+            null,
+            `${m.name} · ${m.origin}${m.pathPattern} · ${m.fields.length} fields`,
+          ),
+          h('p', { className: 'muted' }, `Updated ${new Date(m.updatedAt).toLocaleString()}`),
+          h('label', { className: 'check' }, toggle, 'Autofill on load'),
+          h(
+            'div',
+            { className: 'row' },
+            nameInput,
+            pathInput,
+            h(
+              'button',
+              {
+                className: 'btn',
+                type: 'button',
+                onClick: () => {
+                  void saveFormMapping({
+                    ...m,
+                    name: nameInput.value.trim() || m.name,
+                    pathPattern: pathInput.value.trim() || '/',
+                    updatedAt: Date.now(),
+                  }).then((s) => {
+                    store = s
+                    renderSites()
+                  })
+                },
+              },
+              'Update',
+            ),
+            h(
+              'button',
+              {
+                className: 'btn',
+                type: 'button',
+                onClick: () => chrome.tabs.create({ url: m.origin }),
+              },
+              'Open site',
+            ),
+            h(
+              'button',
+              {
+                className: 'btn danger',
+                type: 'button',
+                onClick: () => {
+                  deletedMapping = m
+                  void deleteFormMapping(m.id).then((s) => {
+                    store = s
+                    renderSites()
+                    window.clearTimeout(deletedTimer)
+                    deletedTimer = window.setTimeout(() => {
+                      deletedMapping = null
+                      renderSites()
+                    }, 6000)
+                  })
+                },
+              },
+              'Delete',
+            ),
+          ),
+          h(
+            'ul',
+            null,
+            ...m.fields.map((f) =>
+              h(
+                'li',
+                null,
+                f.profileKey ? PROFILE_LABELS[f.profileKey] : `Custom ${f.customAnswerId}`,
+                ' — ',
+                f.match.label || f.selector || '',
+              ),
+            ),
+          ),
+        ),
+      )
+    }
+  }
+  search.addEventListener('input', paint)
+  paint()
 }
 
-function escapeAttr(value: string): string {
-  return escapeHtml(value)
+function renderSettings(): void {
+  const root = document.getElementById('settings')!
+  clear(root)
+  const highlight = h('input', {
+    type: 'checkbox',
+    checked: store.settings.highlightFilled,
+  }) as HTMLInputElement
+  highlight.addEventListener('change', () => {
+    void saveSettings({
+      autofillSites: store.settings.autofillSites,
+      highlightFilled: highlight.checked,
+    }).then((s) => {
+      store = s
+    })
+  })
+  root.append(
+    h('div', { className: 'panel-head' }, h('h1', null, 'Settings')),
+    h('label', { className: 'check' }, highlight, 'Highlight filled fields'),
+    h(
+      'p',
+      { className: 'muted' },
+      'Keyboard shortcut: Alt+Shift+F. Customize in Chrome extension shortcuts.',
+    ),
+    h(
+      'button',
+      {
+        className: 'btn',
+        type: 'button',
+        onClick: () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }),
+      },
+      'Open shortcut settings',
+    ),
+  )
+}
+
+function renderBackup(): void {
+  const root = document.getElementById('backup')!
+  clear(root)
+  const preview = h('div', { className: 'muted', id: 'import-preview' })
+  const file = h('input', {
+    type: 'file',
+    accept: 'application/json,.json',
+    hidden: true,
+  }) as HTMLInputElement
+  let pending: ReturnType<typeof parseBackup> | null = null
+
+  file.addEventListener('change', async () => {
+    const f = file.files?.[0]
+    if (!f) return
+    const text = await f.text()
+    pending = parseBackup(text)
+    const p = pending.store.profile
+    const filled = PROFILE_KEYS.filter((k) => String(p[k]).trim()).length
+    preview.textContent = `Preview — profile: ${filled} fields, ${pending.store.formMappings.length} sites, ${pending.store.customAnswers.length} answers.${
+      pending.errors.length ? ` Warnings: ${pending.errors.join('; ')}` : ''
+    }`
+  })
+
+  const confirmInput = h('input', {
+    placeholder: 'Type DELETE to confirm',
+  }) as HTMLInputElement
+
+  root.append(
+    h('div', { className: 'panel-head' }, h('h1', null, 'Backup')),
+    h(
+      'div',
+      { className: 'row' },
+      h(
+        'button',
+        {
+          className: 'btn primary',
+          type: 'button',
+          onClick: () => {
+            const blob = new Blob([JSON.stringify(store, null, 2)], {
+              type: 'application/json',
+            })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `job-fill-backup-${new Date().toISOString().slice(0, 10)}.json`
+            a.click()
+            URL.revokeObjectURL(url)
+          },
+        },
+        'Export JSON',
+      ),
+      h(
+        'button',
+        {
+          className: 'btn',
+          type: 'button',
+          onClick: () => file.click(),
+        },
+        'Import JSON',
+      ),
+      file,
+    ),
+    preview,
+    h(
+      'div',
+      { className: 'row' },
+      h(
+        'button',
+        {
+          className: 'btn',
+          type: 'button',
+          onClick: () => {
+            if (!pending) return
+            void (async () => {
+              const merged: Store = {
+                ...pending!.store,
+                formMappings: [
+                  ...store.formMappings,
+                  ...pending!.store.formMappings,
+                ],
+                customAnswers: [
+                  ...store.customAnswers,
+                  ...pending!.store.customAnswers,
+                ],
+                settings: {
+                  autofillSites: [
+                    ...new Set([
+                      ...store.settings.autofillSites,
+                      ...pending!.store.settings.autofillSites,
+                    ]),
+                  ],
+                  highlightFilled: pending!.store.settings.highlightFilled,
+                },
+              }
+              store = await replaceStore(merged)
+              pending = null
+              renderAll()
+            })()
+          },
+        },
+        'Merge',
+      ),
+      h(
+        'button',
+        {
+          className: 'btn',
+          type: 'button',
+          onClick: () => {
+            if (!pending) return
+            void replaceStore(pending.store).then((s) => {
+              store = s
+              pending = null
+              renderAll()
+            })
+          },
+        },
+        'Replace',
+      ),
+      h(
+        'button',
+        {
+          className: 'btn',
+          type: 'button',
+          onClick: () => {
+            pending = null
+            preview.textContent = ''
+            file.value = ''
+          },
+        },
+        'Cancel',
+      ),
+    ),
+    h('hr'),
+    h('h2', null, 'Delete all data'),
+    confirmInput,
+    h(
+      'button',
+      {
+        className: 'btn danger',
+        type: 'button',
+        onClick: () => {
+          if (confirmInput.value !== 'DELETE') return
+          void replaceStore({
+            schemaVersion: store.schemaVersion,
+            profile: { ...EMPTY_PROFILE },
+            formMappings: [],
+            customAnswers: [],
+            settings: { autofillSites: [], highlightFilled: true },
+          }).then((s) => {
+            store = s
+            confirmInput.value = ''
+            renderAll()
+          })
+        },
+      },
+      'Delete all data',
+    ),
+  )
 }

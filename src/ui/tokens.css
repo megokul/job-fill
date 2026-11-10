@@ -1,0 +1,52 @@
+:root {
+  color-scheme: light dark;
+  --jf-accent: #0f766e;
+  --jf-accent-hover: #0d9488;
+  --jf-ink: #0f172a;
+  --jf-muted: #64748b;
+  --jf-line: #e2e8f0;
+  --jf-surface: #ffffff;
+  --jf-page: #f8fafc;
+  --jf-ok: #166534;
+  --jf-ok-bg: #dcfce7;
+  --jf-warn: #9a3412;
+  --jf-warn-bg: #ffedd5;
+  --jf-danger: #b91c1c;
+  --jf-danger-bg: #fee2e2;
+  --jf-radius-control: 8px;
+  --jf-radius-card: 12px;
+  --jf-space-1: 4px;
+  --jf-space-2: 8px;
+  --jf-space-3: 12px;
+  --jf-space-4: 16px;
+  --jf-space-5: 24px;
+  --jf-font: system-ui, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --jf-page: #0b1220;
+    --jf-surface: #111a2e;
+    --jf-ink: #e2e8f0;
+    --jf-muted: #94a3b8;
+    --jf-line: #24324d;
+    --jf-accent: #2dd4bf;
+    --jf-accent-hover: #5eead4;
+    --jf-ok: #86efac;
+    --jf-ok-bg: #14532d;
+    --jf-warn: #fdba74;
+    --jf-warn-bg: #7c2d12;
+    --jf-danger: #fca5a5;
+    --jf-danger-bg: #7f1d1d;
+  }
+}
+
+.jf-focusable:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--jf-accent);
+  outline-offset: 2px;
+}

@@ -1,8 +1,9 @@
-import { v4 as uuidv4 } from 'uuid'
+import { defaultPathPattern } from '../shared/pathPattern'
 import type { FormMapping, ProfileKey } from '../shared/types'
 import { PROFILE_KEYS, PROFILE_LABELS } from '../shared/types'
 import { buildSelector, showToast } from './filler'
-import { collectFillableElements, extractSignals } from './matcher'
+import { collectFillableElements, extractSignals, matchFields } from './matcher'
+import { clearHighlight, clearHighlights, getUiRoot, setHighlight } from './ui/host'
 
 type SaveMappingFn = (mapping: FormMapping) => Promise<void>
 
@@ -14,13 +15,9 @@ type MapperUiOptions = {
 let active = false
 let overlay: HTMLDivElement | null = null
 let panel: HTMLDivElement | null = null
-let hoverEl: HTMLElement | null = null
 let selectedEl: HTMLElement | null = null
 let draft: FormMapping | null = null
 let saveFn: SaveMappingFn | null = null
-
-const HOVER_OUTLINE = '2px solid #f59e0b'
-const SELECT_OUTLINE = '2px solid #0f766e'
 
 export function isMapModeActive(): boolean {
   return active
@@ -34,10 +31,10 @@ export function startMapMode(options: MapperUiOptions): void {
   draft = options.existing
     ? structuredClone(options.existing)
     : {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         name: defaultMappingName(),
         origin: location.origin,
-        pathPattern: location.pathname || '/',
+        pathPattern: defaultPathPattern(location.pathname || '/'),
         fields: [],
         updatedAt: Date.now(),
       }
@@ -55,6 +52,7 @@ export function stopMapMode(): void {
   active = false
   clearHover()
   clearSelectedOutline()
+  clearHighlights()
   document.removeEventListener('mouseover', onMouseOver, true)
   document.removeEventListener('click', onClick, true)
   document.removeEventListener('keydown', onKeyDown, true)
@@ -62,7 +60,6 @@ export function stopMapMode(): void {
   panel?.remove()
   overlay = null
   panel = null
-  hoverEl = null
   selectedEl = null
   draft = null
   saveFn = null
@@ -74,6 +71,7 @@ function defaultMappingName(): string {
 }
 
 function createOverlay(): void {
+  const root = getUiRoot()
   overlay = document.createElement('div')
   overlay.id = 'job-fill-map-banner'
   overlay.textContent =
@@ -91,11 +89,13 @@ function createOverlay(): void {
     fontSize: '13px',
     textAlign: 'center',
     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    pointerEvents: 'auto',
   })
-  document.documentElement.appendChild(overlay)
+  root.appendChild(overlay)
 }
 
 function createPanel(): void {
+  const root = getUiRoot()
   panel = document.createElement('div')
   panel.id = 'job-fill-map-panel'
   Object.assign(panel.style, {
@@ -114,8 +114,9 @@ function createPanel(): void {
     fontSize: '13px',
     boxShadow: '0 16px 40px rgba(15, 23, 42, 0.25)',
     border: '1px solid #e2e8f0',
+    pointerEvents: 'auto',
   })
-  document.documentElement.appendChild(panel)
+  root.appendChild(panel)
 }
 
 function renderPanel(): void {
@@ -125,7 +126,7 @@ function renderPanel(): void {
     .map(
       (f) => `
       <li style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;">
-        <span>${escapeHtml(PROFILE_LABELS[f.profileKey])}<br>
+        <span>${escapeHtml(f.profileKey ? PROFILE_LABELS[f.profileKey] : 'Custom')}<br>
           <small style="color:#64748b">${escapeHtml(f.match.label || f.match.name || f.selector || '')}</small>
         </span>
         <button type="button" data-remove="${f.id}" style="${btnStyle(true)}">Remove</button>
@@ -182,9 +183,11 @@ function showFieldPicker(el: HTMLElement): void {
   if (!picker) return
 
   const signals = extractSignals(el)
-  const options = PROFILE_KEYS.map(
-    (key) => `<option value="${key}">${escapeHtml(PROFILE_LABELS[key])}</option>`,
-  ).join('')
+  const guess = matchFields([el])[0]?.fillKey
+  const options = PROFILE_KEYS.map((key) => {
+    const selected = guess === key ? ' selected' : ''
+    return `<option value="${key}"${selected}>${escapeHtml(PROFILE_LABELS[key])}</option>`
+  }).join('')
 
   picker.style.display = 'block'
   picker.innerHTML = `
@@ -202,11 +205,13 @@ function showFieldPicker(el: HTMLElement): void {
   picker.querySelector('#jf-map-add')?.addEventListener('click', () => {
     const key = (picker.querySelector('#jf-map-key') as HTMLSelectElement).value as ProfileKey
     if (!draft) return
-    // Replace existing mapping for same key on this form
-    draft.fields = draft.fields.filter((f) => f.profileKey !== key)
+    // A field (by selector) may be mapped once; remapping replaces it.
+    // Multiple fields may share the same profile key.
+    const selector = buildSelector(el)
+    draft.fields = draft.fields.filter((f) => f.selector !== selector)
     draft.fields.push({
-      id: uuidv4(),
-      selector: buildSelector(el),
+      id: crypto.randomUUID(),
+      selector,
       match: {
         name: signals.name,
         id: signals.id,
@@ -247,9 +252,7 @@ function onMouseOver(event: MouseEvent): void {
   const field = findFillable(target)
   if (!field || field === selectedEl) return
   clearHover()
-  hoverEl = field
-  hoverEl.style.outline = HOVER_OUTLINE
-  hoverEl.style.outlineOffset = '2px'
+  setHighlight('map-hover', field, 'hover')
 }
 
 function onClick(event: MouseEvent): void {
@@ -267,8 +270,7 @@ function onClick(event: MouseEvent): void {
   clearHover()
   clearSelectedOutline()
   selectedEl = field
-  selectedEl.style.outline = SELECT_OUTLINE
-  selectedEl.style.outlineOffset = '2px'
+  setHighlight('map-selected', field, 'selected')
   showFieldPicker(field)
 }
 
@@ -292,24 +294,21 @@ function findFillable(target: HTMLElement): HTMLElement | null {
 }
 
 function isUi(el: HTMLElement): boolean {
+  const root = el.getRootNode()
+  if (root instanceof ShadowRoot && root.host?.tagName === 'JOB-FILL-ROOT') {
+    return true
+  }
   return Boolean(
-    el.closest('#job-fill-map-banner, #job-fill-map-panel, #job-fill-toast'),
+    el.closest('#job-fill-map-banner, #job-fill-map-panel, #job-fill-toast, job-fill-root'),
   )
 }
 
 function clearHover(): void {
-  if (hoverEl && hoverEl !== selectedEl) {
-    hoverEl.style.outline = ''
-    hoverEl.style.outlineOffset = ''
-  }
-  hoverEl = null
+  clearHighlight('map-hover')
 }
 
 function clearSelectedOutline(): void {
-  if (selectedEl) {
-    selectedEl.style.outline = ''
-    selectedEl.style.outlineOffset = ''
-  }
+  clearHighlight('map-selected')
 }
 
 const inputStyle =

@@ -1,13 +1,29 @@
 # Job Fill
 
-Chrome extension (Manifest V3) that autofills job application forms from a **local** profile. It combines:
+Chrome extension (Manifest V3) that autofills job application forms from a **local** profile.
 
-1. **Heuristic matching** on labels, names, placeholders, and autocomplete attributes
-2. **Manual form mappings** you teach once per site, reused on later visits
+## Features
 
-No cloud sync, no resume upload, and it never clicks Submit/Apply.
+- Heuristic matching on labels, names, placeholders, autocomplete, and `type`
+- Manual form mappings (per origin + path pattern), preferred over heuristics
+- Custom answers for mapped free-text questions only
+- Multi-frame fill via `all_frames` + `chrome.scripting.executeScript`
+- Undo last fill, fill report in the popup
+- Autofill-on-load only for origins you enable
+- Import/export JSON backups with validation
 
-## Load unpacked (dev)
+Never clicks Apply/Submit. No network calls for autofill.
+
+## Permissions
+
+| Permission | Why |
+| --- | --- |
+| `storage` | Profile, mappings, settings in `chrome.storage.local` |
+| `activeTab` | Act on the current tab from the popup |
+| `scripting` | Call the content API in every frame (`fillTab` / `undoTab` / map mode) |
+| Host `http(s)://*/*` | Run content scripts (and reach cross-origin application iframes) |
+
+## Load unpacked
 
 ```bash
 npm install
@@ -16,45 +32,33 @@ npm run dev
 
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
-3. Click **Load unpacked**
-4. Select the `dist/` folder created by Vite/CRXJS
+3. **Load unpacked** → select `dist/`
 
-For a production build:
+Production build:
 
 ```bash
 npm run build
 ```
 
-Then load `dist/` the same way.
-
 ## Usage
 
-1. Open the extension **Options** page and fill your basic profile (name, email, phone, address, LinkedIn, portfolio, work auth, salary).
-2. On a job application page, open the popup and click **Fill this page** (or press `Alt+Shift+F`).
-3. For fields the heuristic misses, click **Map this form**, click each stubborn input, choose the profile field, then **Save mapping**.
-4. Next visit to the same origin/path pattern fills mapped fields first, then heuristics for the rest.
-
-## Privacy
-
-- Profile and mappings live in `chrome.storage.local` only.
-- Do not store SSNs or government IDs in free-text fields.
-- Export/import JSON is available on the Options page for backups.
+1. Open **Options** and complete your profile (autosaves).
+2. On an application page, **Fill this page** (or `Alt+Shift+F`).
+3. Use **Map this form** for stubborn fields; optionally add custom answers and map them.
+4. Toggle **Autofill on this site** after a mapping exists.
 
 ## Scripts
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Build + HMR via CRXJS |
+| `npm run dev` | CRXJS/Vite HMR build into `dist/` |
 | `npm run build` | Typecheck + production build |
-| `npm test` | Vitest unit tests (matcher + path patterns) |
+| `npm test` | Vitest |
+| `npm run lint` | ESLint |
+| `npm run check` | `tsc` + ESLint + tests |
 
-## Project layout
+## Privacy
 
-```
-src/
-  background/     service worker (storage message router + keyboard command)
-  content/        fill engine, synonym matcher, map-mode UI
-  popup/          Fill / Map / Open profile
-  options/        profile editor, settings, mapping management
-  shared/         types, storage helpers, synonyms, path matching
-```
+- Data stays in `chrome.storage.local`
+- Do not store SSNs or government IDs
+- Export/import is local JSON only
