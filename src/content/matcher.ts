@@ -92,13 +92,29 @@ export function queryAllDeep(
   return out
 }
 
+const elementIds = new WeakMap<Element, number>()
+let nextElementId = 1
+
+function stableElementId(el: Element): number {
+  let id = elementIds.get(el)
+  if (id == null) {
+    id = nextElementId++
+    elementIds.set(el, id)
+  }
+  return id
+}
+
 function radioGroupKey(el: HTMLInputElement): string {
-  const formId = el.form?.id ?? el.closest('form')?.id ?? 'nofrm'
+  const form = el.form ?? el.closest('form')
+  const formPart = form ? `f${stableElementId(form)}` : 'nofrm'
   const radiogroup = el.closest('[role="radiogroup"]')
   if (radiogroup) {
-    return `rg:${formId}:${radiogroup.id || radiogroup.getAttribute('aria-labelledby') || radiogroup.outerHTML.length}`
+    return `rg:${formPart}:${stableElementId(radiogroup)}`
   }
-  return `name:${formId}:${el.name || el.id}`
+  if (!el.name) {
+    return `solo:${formPart}:${stableElementId(el)}`
+  }
+  return `name:${formPart}:${el.name}`
 }
 
 export function getRadioGroupMembers(radio: HTMLInputElement): HTMLInputElement[] {

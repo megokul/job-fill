@@ -168,6 +168,33 @@ describe('native setter and radios', () => {
     const signals = extractSignals(work)
     expect(signals.label?.toLowerCase()).toContain('authorized to work')
   })
+
+  it('collects two identical nameless radiogroups as separate fields and both get answered', () => {
+    const group = `
+      <div role="radiogroup">
+        <label><input type="radio" value="yes" /> Yes</label>
+        <label><input type="radio" value="no" /> No</label>
+      </div>
+    `
+    mount(`<form>${group}${group}</form>`)
+    const els = collectFillableElements(document, { isVisible: alwaysVisible })
+    const radios = els.filter(
+      (el) => el instanceof HTMLInputElement && el.type === 'radio',
+    ) as HTMLInputElement[]
+    expect(radios).toHaveLength(2)
+    expect(radios[0]).not.toBe(radios[1])
+
+    setControlValue(radios[0], 'yes', 'workAuthorized')
+    setControlValue(radios[1], 'no', 'requiresSponsorship')
+    const yes0 = radios[0]
+      .closest('[role="radiogroup"]')!
+      .querySelector<HTMLInputElement>('input[value="yes"]')!
+    const no1 = radios[1]
+      .closest('[role="radiogroup"]')!
+      .querySelector<HTMLInputElement>('input[value="no"]')!
+    expect(yes0.checked).toBe(true)
+    expect(no1.checked).toBe(true)
+  })
 })
 
 describe('fixture smoke', () => {
