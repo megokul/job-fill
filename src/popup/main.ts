@@ -1,25 +1,37 @@
 import { mappingsForUrl } from '../shared/pathMatch'
 import { getStore, profileCompleteness, saveSettings } from '../shared/storage'
-import { fillTab, pingTab, startMapInBestFrame, undoTab } from '../shared/tabApi'
+import {
+  fillTab,
+  frameInfo,
+  pickFormFrame,
+  pingTab,
+  startMapInBestFrame,
+  undoTab,
+} from '../shared/tabApi'
 import type { FillResult, FilledField } from '../shared/messages'
 import type { FormMapping, Store } from '../shared/types'
 import { clear, h } from '../ui/dom'
 
 const app = document.getElementById('app')!
 
+type PageContext = {
+  store: Store
+  host: string
+  mappingName?: string
+  origin: string
+  formHostNote?: string
+  formHref: string
+}
+
 type ViewState =
   | { kind: 'unsupported'; reason: string }
-  | { kind: 'incomplete'; store: Store; host: string; mappingName?: string }
-  | { kind: 'ready'; store: Store; host: string; mappingName?: string; origin: string }
-  | {
+  | ({ kind: 'incomplete' } & PageContext)
+  | ({ kind: 'ready' } & PageContext)
+  | ({
       kind: 'result'
-      store: Store
-      host: string
-      mappingName?: string
-      origin: string
       results: FillResult[]
       tabId: number
-    }
+    } & PageContext)
 
 let busy = false
 
@@ -46,20 +58,38 @@ async function boot(): Promise<void> {
     return
   }
 
-  const url = new URL(tab.url)
-  const mapping = bestMapping(store.formMappings, tab.url)
+  const ctx = await resolvePageContext(store, tab.id, tab.url)
   const { ready } = profileCompleteness(store.profile)
-  const base = {
-    store,
-    host: url.hostname.replace(/^www\./, ''),
-    mappingName: mapping?.name,
-    origin: url.origin,
+  render(ready ? { kind: 'ready', ...ctx } : { kind: 'incomplete', ...ctx })
+}
+
+async function resolvePageContext(
+  store: Store,
+  tabId: number,
+  tabUrl: string,
+): Promise<PageContext> {
+  const tab = new URL(tabUrl)
+  const frames = await frameInfo(tabId)
+  const formFrame = pickFormFrame(frames)
+  const formHref = formFrame?.href || tabUrl
+  const formOrigin = formFrame?.origin || tab.origin
+  const mapping = bestMapping(store.formMappings, formHref)
+  let formHostNote: string | undefined
+  if (formFrame && formOrigin !== tab.origin) {
+    try {
+      formHostNote = `Form hosted on ${new URL(formOrigin).hostname.replace(/^www\./, '')}`
+    } catch {
+      formHostNote = `Form hosted on ${formOrigin}`
+    }
   }
-  render(
-    ready
-      ? { kind: 'ready', ...base }
-      : { kind: 'incomplete', store, host: base.host, mappingName: base.mappingName },
-  )
+  return {
+    store,
+    host: tab.hostname.replace(/^www\./, ''),
+    mappingName: mapping?.name,
+    origin: formOrigin,
+    formHostNote,
+    formHref,
+  }
 }
 
 function bestMapping(mappings: FormMapping[], href: string): FormMapping | undefined {
@@ -81,12 +111,18 @@ function render(state: ViewState): void {
     return
   }
 
-  const { store, host, mappingName } = state
+  const { store, host, mappingName, formHostNote } = state
   const { filled, total, ready } = profileCompleteness(store.profile)
   const origin = 'origin' in state ? state.origin : ''
 
   app.append(
-    header(ready ? 'Ready' : 'Incomplete', ready ? 'ready' : 'warn', host, mappingName),
+    header(
+      ready ? 'Ready' : 'Incomplete',
+      ready ? 'ready' : 'warn',
+      host,
+      mappingName,
+      formHostNote,
+    ),
   )
 
   if (state.kind === 'incomplete') {
@@ -180,7 +216,12 @@ function header(
   pillClass = '',
   host?: string,
   mappingName?: string,
+  formHostNote?: string,
 ): HTMLElement {
+  const metaParts: string[] = []
+  if (host) metaParts.push(host)
+  if (mappingName) metaParts.push(`Mapping: “${mappingName}”`)
+  if (formHostNote) metaParts.push(formHostNote)
   return h(
     'header',
     { className: 'header' },
@@ -188,13 +229,8 @@ function header(
       'div',
       null,
       h('h1', null, 'Job Fill'),
-      host
-        ? h(
-            'p',
-            { className: 'meta' },
-            host,
-            mappingName ? ` · Mapping: “${mappingName}”` : '',
-          )
+      metaParts.length
+        ? h('p', { className: 'meta' }, metaParts.join(' · '))
         : null,
     ),
     h('span', { className: `pill ${pillClass}` }, status),
@@ -343,14 +379,11 @@ async function doFill(
   try {
     const results = await fillTab(tab.id)
     const store = await getStore()
-    const url = new URL(tab.url)
+    const ctx = await resolvePageContext(store, tab.id, tab.url)
     busy = false
     render({
       kind: 'result',
-      store,
-      host: url.hostname.replace(/^www\./, ''),
-      mappingName: bestMapping(store.formMappings, tab.url)?.name,
-      origin: url.origin,
+      ...ctx,
       results,
       tabId: tab.id,
     })
@@ -372,6 +405,8 @@ async function doUndo(state: Extract<ViewState, { kind: 'result' }>): Promise<vo
     host: state.host,
     mappingName: state.mappingName,
     origin: state.origin,
+    formHostNote: state.formHostNote,
+    formHref: state.formHref,
   })
 }
 

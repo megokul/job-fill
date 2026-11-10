@@ -99,3 +99,46 @@ export async function pingTab(tabId: number): Promise<boolean> {
     return false
   }
 }
+
+export type FrameInfo = {
+  frameId: number
+  href: string
+  origin: string
+  fillable: number
+}
+
+export async function frameInfo(tabId: number): Promise<FrameInfo[]> {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => {
+      const api = globalThis.__jobFill
+      return {
+        href: location.href,
+        origin: location.origin,
+        fillable: api ? api.countFillable() : 0,
+      }
+    },
+  })
+  return results
+    .map((row) => {
+      const r = row.result
+      if (!r || typeof r !== 'object') return null
+      return {
+        frameId: row.frameId,
+        href: typeof r.href === 'string' ? r.href : '',
+        origin: typeof r.origin === 'string' ? r.origin : '',
+        fillable: typeof r.fillable === 'number' ? r.fillable : 0,
+      }
+    })
+    .filter((f): f is FrameInfo => Boolean(f && f.href))
+}
+
+/** Frame with the most fillable fields (ties → lowest frameId). */
+export function pickFormFrame(frames: FrameInfo[]): FrameInfo | null {
+  if (!frames.length) return null
+  return frames.reduce((best, f) => {
+    if (f.fillable > best.fillable) return f
+    if (f.fillable === best.fillable && f.frameId < best.frameId) return f
+    return best
+  })
+}
