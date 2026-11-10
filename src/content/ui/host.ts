@@ -8,6 +8,11 @@ let shadow: ShadowRoot | null = null
 let highlightLayer: HTMLElement | null = null
 const highlightBoxes = new Map<string, { el: HTMLElement; target: HTMLElement; kind: HighlightKind }>()
 
+let toastHideTimer: number | undefined
+let toastRemainingMs = 0
+let toastHideStartedAt = 0
+let toastPaused = false
+
 export function ensureUiHost(): ShadowRoot {
   if (shadow) return shadow
   let existing = document.querySelector(HOST_TAG) as HTMLElement | null
@@ -55,11 +60,36 @@ export function ensureUiHost(): ShadowRoot {
 
   const toast = document.createElement('div')
   toast.id = 'toast'
+  toast.setAttribute('role', 'status')
   shadow.appendChild(toast)
 
   window.addEventListener('scroll', repositionAll, true)
   window.addEventListener('resize', repositionAll)
   return shadow
+}
+
+function clearToastHideTimer(): void {
+  if (toastHideTimer !== undefined) {
+    window.clearTimeout(toastHideTimer)
+    toastHideTimer = undefined
+  }
+}
+
+function scheduleToastHide(ms: number): void {
+  clearToastHideTimer()
+  toastRemainingMs = ms
+  toastHideStartedAt = Date.now()
+  toastPaused = false
+  toastHideTimer = window.setTimeout(() => {
+    hideHostToast()
+  }, ms)
+}
+
+export function hideHostToast(): void {
+  clearToastHideTimer()
+  toastPaused = false
+  const root = shadow
+  root?.getElementById('toast')?.classList.remove('visible')
 }
 
 export function showHostToast(
@@ -69,7 +99,9 @@ export function showHostToast(
   const root = ensureUiHost()
   const toast = root.getElementById('toast')
   if (!toast) return
+  clearToastHideTimer()
   toast.textContent = ''
+  toast.setAttribute('role', 'status')
   const text = document.createElement('div')
   text.textContent = message
   toast.appendChild(text)
@@ -80,18 +112,27 @@ export function showHostToast(
       const btn = document.createElement('button')
       btn.type = 'button'
       btn.textContent = action.label
-      btn.addEventListener('click', () => action.onClick())
+      btn.addEventListener('click', () => {
+        hideHostToast()
+        action.onClick()
+      })
       row.appendChild(btn)
     }
     toast.appendChild(row)
   }
+  toast.onmouseenter = () => {
+    if (!toast.classList.contains('visible') || toastPaused) return
+    toastPaused = true
+    const elapsed = Date.now() - toastHideStartedAt
+    toastRemainingMs = Math.max(0, toastRemainingMs - elapsed)
+    clearToastHideTimer()
+  }
+  toast.onmouseleave = () => {
+    if (!toast.classList.contains('visible') || !toastPaused) return
+    scheduleToastHide(toastRemainingMs || 6000)
+  }
   toast.classList.add('visible')
-  window.setTimeout(() => toast.classList.remove('visible'), 6000)
-}
-
-export function hideHostToast(): void {
-  const root = shadow
-  root?.getElementById('toast')?.classList.remove('visible')
+  scheduleToastHide(6000)
 }
 
 export function setHighlight(

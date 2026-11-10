@@ -16,11 +16,12 @@ export type FillResult = {
   frameUrl: string
 }
 
-export type Message =
-  | { type: 'FILL_PAGE' }
-  | { type: 'UNDO_FILL' }
-  | { type: 'START_MAP_MODE' }
-  | { type: 'STOP_MAP_MODE' }
-  | { type: 'PING' }
+export type ToastSummary = {
+  filled: number
+  left: number
+}
+
+/** Content ↔ background messages. Only UNDO_TAB remains after the executeScript API. */
+export type Message = { type: 'UNDO_TAB' }
 
 export type MessageType = Message['type']

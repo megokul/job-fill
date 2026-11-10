@@ -1,4 +1,4 @@
-import type { FillResult } from './messages'
+import type { FillResult, ToastSummary } from './messages'
 
 export type JobFillFrameApi = {
   fill: () => Promise<FillResult>
@@ -6,6 +6,7 @@ export type JobFillFrameApi = {
   countFillable: () => number
   startMap: () => Promise<{ ok: true }>
   stopMap: () => Promise<{ ok: true }>
+  toast: (summary: ToastSummary) => void
 }
 
 declare global {
@@ -28,6 +29,19 @@ export async function fillTab(tabId: number): Promise<FillResult[]> {
   return results
     .map((r) => r.result)
     .filter((r): r is FillResult => Boolean(r && Array.isArray(r.filled)))
+}
+
+export async function toastTopFrame(
+  tabId: number,
+  summary: ToastSummary,
+): Promise<void> {
+  await chrome.scripting.executeScript({
+    target: { tabId, frameIds: [0] },
+    args: [summary],
+    func: (s: ToastSummary) => {
+      globalThis.__jobFill?.toast(s)
+    },
+  })
 }
 
 export async function undoTab(tabId: number): Promise<number> {

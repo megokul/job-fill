@@ -1,4 +1,4 @@
-import type { FillResult, Message } from '../shared/messages'
+import type { FillResult, ToastSummary } from '../shared/messages'
 import { mappingsForUrl } from '../shared/pathMatch'
 import { getStore, saveCustomAnswers, saveFormMapping } from '../shared/storage'
 import type { FormMapping } from '../shared/types'
@@ -13,6 +13,7 @@ type FrameApi = {
   countFillable: () => number
   startMap: () => Promise<{ ok: true }>
   stopMap: () => Promise<{ ok: true }>
+  toast: (summary: ToastSummary) => void
 }
 
 let userTyped = false
@@ -26,7 +27,7 @@ document.addEventListener(
 )
 
 const api: FrameApi = {
-  fill: async () => runFill({ showToastUi: false }),
+  fill: async () => runFill(),
   undo: async () => undoLastFill(),
   countFillable: () => collectFillableElements().length,
   startMap: async () => runStartMapMode(),
@@ -34,19 +35,10 @@ const api: FrameApi = {
     stopMapMode()
     return { ok: true }
   },
+  toast: (summary) => showShortcutToast(summary),
 }
 
 ;(globalThis as typeof globalThis & { __jobFill?: FrameApi }).__jobFill = api
-
-chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
-  void handleContentMessage(message)
-    .then((result) => sendResponse(result))
-    .catch((err: unknown) => {
-      const text = err instanceof Error ? err.message : 'Unknown error'
-      sendResponse({ error: text })
-    })
-  return true
-})
 
 void bootstrapAutofillOnLoad()
 
@@ -77,10 +69,7 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
 
     let result = tryFill()
     if (result.filled.length > 0) {
-      showToast(formatFillMessage(result), [
-        { label: 'Undo', onClick: () => void undoLastFill() },
-        { label: 'Dismiss', onClick: () => undefined },
-      ])
+      showLocalFillToast(result)
       return
     }
 
@@ -102,10 +91,7 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
         result = tryFill()
         if (result.filled.length > 0) {
           observer.disconnect()
-          showToast(formatFillMessage(result), [
-            { label: 'Undo', onClick: () => void undoLastFill() },
-            { label: 'Dismiss', onClick: () => undefined },
-          ])
+          showLocalFillToast(result)
         }
       }, 400)
     })
@@ -119,37 +105,12 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
   }
 }
 
-async function handleContentMessage(
-  message: Message,
-): Promise<FillResult | { ok: true; restored?: number } | { error: string }> {
-  switch (message.type) {
-    case 'FILL_PAGE':
-      return runFill({ showToastUi: true })
-    case 'UNDO_FILL':
-      return { ok: true, restored: undoLastFill().restored }
-    case 'START_MAP_MODE':
-      return runStartMapMode()
-    case 'STOP_MAP_MODE':
-      stopMapMode()
-      return { ok: true }
-    case 'PING':
-      return { ok: true }
-  }
-}
-
-async function runFill(opts: { showToastUi: boolean }): Promise<FillResult> {
+async function runFill(): Promise<FillResult> {
   if (isMapModeActive()) stopMapMode()
   const store = await getStore()
-  const result = fillPage(store.profile, store.formMappings, store.settings, {
+  return fillPage(store.profile, store.formMappings, store.settings, {
     customAnswers: store.customAnswers,
   })
-  if (opts.showToastUi) {
-    showToast(formatFillMessage(result), [
-      { label: 'Undo', onClick: () => void undoLastFill() },
-      { label: 'Dismiss', onClick: () => undefined },
-    ])
-  }
-  return result
 }
 
 async function runStartMapMode(): Promise<{ ok: true }> {
@@ -172,10 +133,29 @@ async function runStartMapMode(): Promise<{ ok: true }> {
   return { ok: true }
 }
 
-function formatFillMessage(result: FillResult): string {
-  if (result.filled.length === 0) {
-    return 'No empty matching fields found. Try Map this form for stubborn sites.'
-  }
-  const left = result.unmatched.length
-  return `Filled ${result.filled.length} fields · ${left} left`
+function showLocalFillToast(result: FillResult): void {
+  showToast(formatFillMessage(result.filled.length, result.unmatched.length), [
+    { label: 'Undo', onClick: () => void undoLastFill() },
+    { label: 'Dismiss', onClick: () => undefined },
+  ])
+}
+
+function showShortcutToast(summary: ToastSummary): void {
+  const message =
+    summary.filled === 0
+      ? 'No matching empty fields'
+      : formatFillMessage(summary.filled, summary.left)
+  showToast(message, [
+    {
+      label: 'Undo',
+      onClick: () => {
+        void chrome.runtime.sendMessage({ type: 'UNDO_TAB' })
+      },
+    },
+    { label: 'Dismiss', onClick: () => undefined },
+  ])
+}
+
+function formatFillMessage(filled: number, left: number): string {
+  return `Filled ${filled} fields · ${left} left`
 }
