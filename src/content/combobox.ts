@@ -1,6 +1,19 @@
+import { countryAliases, stateAliases } from '../shared/regions'
 import type { FillKey } from '../shared/types'
 import { isComboboxControl } from './matcher'
 import { pickOption } from './pickOption'
+
+/** Prefer a long alias so short codes (US/CA) do not substring-filter the menu. */
+function filterTextForCombobox(value: string, fillKey: FillKey | null): string {
+  const aliases =
+    fillKey === 'country'
+      ? countryAliases(value)
+      : fillKey === 'state'
+        ? stateAliases(value)
+        : []
+  if (aliases.length === 0) return value
+  return [...aliases].sort((a, b) => b.length - a.length)[0] ?? value
+}
 
 export const CLOSED_COMBOBOX_KEYS = new Set<FillKey>([
   'country',
@@ -131,10 +144,33 @@ function restoreAndClose(el: HTMLElement, originalText: string): void {
 }
 
 function controlShowsChosen(el: HTMLElement, chosenText: string): boolean {
-  const shown = comboboxDisplayText(el).trim().toLowerCase()
   const want = chosenText.trim().toLowerCase()
-  if (!shown || !want) return false
-  return shown === want || shown.includes(want) || want.includes(shown)
+  if (!want) return false
+
+  const candidates: string[] = [comboboxDisplayText(el)]
+  // react-select keeps the filter input empty after selection and renders
+  // the chosen label in a sibling single-value node under the control.
+  const controlRoot =
+    el.closest('[class*="-control"]') ??
+    el.closest('[class*="control"]') ??
+    el.closest('[role="combobox"]') ??
+    el.parentElement
+  if (controlRoot) {
+    candidates.push(controlRoot.textContent ?? '')
+    const single = controlRoot.querySelector(
+      '[class*="single-value"], [class*="SingleValue"]',
+    )
+    if (single?.textContent) candidates.push(single.textContent)
+  }
+  const combo = el.closest('[role="combobox"]')
+  if (combo && combo !== el) candidates.push(combo.textContent ?? '')
+
+  for (const raw of candidates) {
+    const shown = raw.replace(/\s+/g, ' ').trim().toLowerCase()
+    if (!shown) continue
+    if (shown === want || shown.includes(want) || want.includes(shown)) return true
+  }
+  return false
 }
 
 /**
@@ -150,10 +186,15 @@ export async function fillCombobox(
   const originalText =
     el instanceof HTMLInputElement ? el.value : comboboxDisplayText(el)
 
+  // Open: click the control first (react-select opens on mouse down/focus),
+  // then type the filter text into input comboboxes.
+  el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+  el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  if (typeof el.focus === 'function') el.focus()
+
   if (el instanceof HTMLInputElement) {
-    setInputText(el, value, false)
-  } else {
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    setInputText(el, filterTextForCombobox(value, fillKey), false)
   }
 
   const optionEls = await waitForOptions(el, 1500)
@@ -182,10 +223,15 @@ export async function fillCombobox(
   chosen.dispatchEvent(new MouseEvent('mouseup', mouse))
   chosen.dispatchEvent(new MouseEvent('click', mouse))
 
-  await sleep(30)
+  await sleep(50)
   if (!controlShowsChosen(el, chosenText)) {
-    restoreAndClose(el, originalText)
-    return false
+    // react-select may have applied the value via React state even when the
+    // filter input is empty — re-check after a short settle.
+    await sleep(100)
+    if (!controlShowsChosen(el, chosenText)) {
+      restoreAndClose(el, originalText)
+      return false
+    }
   }
   return true
 }

@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import Select, { type SingleValue } from 'react-select'
 
 type FormState = {
   firstName: string
@@ -7,6 +8,7 @@ type FormState = {
   email: string
   phone: string
   country: string
+  location: string
   workAuthorized: string
 }
 
@@ -16,7 +18,143 @@ const empty: FormState = {
   email: '',
   phone: '',
   country: '',
+  location: '',
   workAuthorized: '',
+}
+
+const countryOptions = [
+  { value: '14', label: 'Australia' },
+  { value: '231', label: 'United States of America' },
+]
+
+const LOCATION_OPTIONS = [
+  'London, CA',
+  'Austin, TX',
+  'San Francisco, CA',
+  'Remote',
+]
+
+function LocationTypeahead(props: {
+  value: string
+  onChange: (value: string) => void
+}): React.ReactElement {
+  const [text, setText] = useState(props.value)
+  const [open, setOpen] = useState(false)
+  const [options, setOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    setText(props.value)
+  }, [props.value])
+
+  useEffect(() => {
+    if (!open) {
+      setOptions([])
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setOptions(LOCATION_OPTIONS)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [open, text])
+
+  const close = (): void => {
+    setOpen(false)
+    setOptions([])
+  }
+
+  return (
+    <div>
+      <label htmlFor="location-cb">Location</label>
+      <input
+        id="location-cb"
+        data-testid="location"
+        role="combobox"
+        aria-controls="location-list"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setText(props.value)
+            close()
+          }
+        }}
+      />
+      <div
+        id="location-list"
+        role="listbox"
+        hidden={!open || options.length === 0}
+      >
+        {options.map((opt) => (
+          <div
+            key={opt}
+            role="option"
+            data-value={opt}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              setText(opt)
+              props.onChange(opt)
+              close()
+            }}
+          >
+            {opt}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function YesNoListbox(props: {
+  value: string
+  onChange: (value: string) => void
+}): React.ReactElement {
+  const [open, setOpen] = useState(false)
+  const label =
+    props.value === 'yes' ? 'Yes' : props.value === 'no' ? 'No' : 'Select…'
+
+  return (
+    <div>
+      <span id="wa-label">Are you legally authorized to work in the United States?</span>
+      <button
+        type="button"
+        id="wa-btn"
+        data-testid="workAuthorized"
+        aria-haspopup="listbox"
+        aria-labelledby="wa-label"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false)
+        }}
+      >
+        {label}
+      </button>
+      {open ? (
+        <div id="wa-list" role="listbox">
+          {['Yes', 'No'].map((opt) => (
+            <div
+              key={opt}
+              role="option"
+              data-value={opt.toLowerCase()}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                props.onChange(opt.toLowerCase())
+                setOpen(false)
+              }}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function App(): React.ReactElement {
@@ -39,6 +177,9 @@ function App(): React.ReactElement {
     (value: string): void => {
       setState((prev) => ({ ...prev, [key]: value }))
     }
+
+  const countryValue =
+    countryOptions.find((o) => o.value === state.country) ?? null
 
   return (
     <div>
@@ -89,46 +230,29 @@ function App(): React.ReactElement {
           />
         </label>
 
-        <label>
-          Country
-          <select
-            data-testid="country"
-            value={state.country}
-            onChange={(e) => set('country')(e.target.value)}
-          >
-            <option value="">Select…</option>
-            <option value="14">Australia</option>
-            <option value="231">United States of America</option>
-          </select>
-        </label>
+        <label htmlFor="country-select">Country</label>
+        <div data-testid="country">
+          <Select
+            inputId="country-select"
+            options={countryOptions}
+            value={countryValue}
+            placeholder="Select…"
+            classNamePrefix="country-select"
+            onChange={(opt: SingleValue<(typeof countryOptions)[number]>) => {
+              set('country')(opt?.value ?? '')
+            }}
+          />
+        </div>
 
-        <fieldset>
-          <legend>Are you legally authorized to work in the United States?</legend>
-          <label>
-            <input
-              type="radio"
-              name="workAuthorized"
-              value="yes"
-              checked={state.workAuthorized === 'yes'}
-              onChange={(e) =>
-                set('workAuthorized')(e.target.checked ? 'yes' : '')
-              }
-            />{' '}
-            Yes
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="workAuthorized"
-              value="no"
-              checked={state.workAuthorized === 'no'}
-              onChange={(e) =>
-                set('workAuthorized')(e.target.checked ? 'no' : '')
-              }
-            />{' '}
-            No
-          </label>
-        </fieldset>
+        <LocationTypeahead
+          value={state.location}
+          onChange={set('location')}
+        />
+
+        <YesNoListbox
+          value={state.workAuthorized}
+          onChange={set('workAuthorized')}
+        />
       </form>
       <pre data-testid="state">{JSON.stringify(state)}</pre>
     </div>
