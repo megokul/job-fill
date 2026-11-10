@@ -166,22 +166,25 @@ export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
   }
 
   const synonyms = SYNONYMS[fillKey]
-  const labelHay = signals.label ? normalizeText(signals.label) : ''
-  const ariaHay = signals.ariaLabel ? normalizeText(signals.ariaLabel) : ''
-  const placeholderHay = signals.placeholder
-    ? normalizeText(signals.placeholder)
-    : ''
-  const nameHay = signals.name
-    ? normalizeText(splitIdentifier(signals.name))
-    : ''
-  const idHay = signals.id ? normalizeText(splitIdentifier(signals.id)) : ''
+  type HayKind = 'label' | 'aria' | 'placeholder' | 'ident'
+  const haystacks: Array<{ hay: string; kind: HayKind }> = []
 
-  const haystacks: Array<{ hay: string; kind: 'label' | 'aria' | 'other' }> = []
-  if (labelHay) haystacks.push({ hay: labelHay, kind: 'label' })
-  if (ariaHay) haystacks.push({ hay: ariaHay, kind: 'aria' })
-  if (placeholderHay) haystacks.push({ hay: placeholderHay, kind: 'other' })
-  if (nameHay) haystacks.push({ hay: nameHay, kind: 'other' })
-  if (idHay) haystacks.push({ hay: idHay, kind: 'other' })
+  const pushUnique = (hay: string, kind: HayKind): void => {
+    if (!hay) return
+    if (haystacks.some((h) => h.hay === hay && h.kind === kind)) return
+    haystacks.push({ hay, kind })
+  }
+
+  if (signals.label) pushUnique(normalizeText(signals.label), 'label')
+  if (signals.ariaLabel) pushUnique(normalizeText(signals.ariaLabel), 'aria')
+  if (signals.placeholder) {
+    pushUnique(normalizeText(signals.placeholder), 'placeholder')
+  }
+  for (const raw of [signals.name, signals.id]) {
+    if (!raw) continue
+    pushUnique(normalizeText(splitIdentifier(raw)), 'ident')
+    pushUnique(normalizeText(raw), 'ident')
+  }
 
   if (haystacks.length === 0) {
     return inputTypeBoost(signals.inputType, fillKey)
@@ -202,13 +205,11 @@ export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
     const exactOnly = EXACT_ONLY.has(needle)
 
     for (const { hay, kind } of haystacks) {
-      const isNameOrId =
-        (signals.name && hay === normalizeText(splitIdentifier(signals.name))) ||
-        (signals.id && hay === normalizeText(splitIdentifier(signals.id)))
       // Short-label rule: single-token synonym vs label/aria/placeholder only if ≤4 tokens.
+      // Identifier name/id haystacks are exempt.
       if (
         needleTokens.length === 1 &&
-        !isNameOrId &&
+        kind !== 'ident' &&
         fillKey !== 'workAuthorized' &&
         fillKey !== 'requiresSponsorship'
       ) {

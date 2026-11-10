@@ -149,6 +149,38 @@ describe('score helpers', () => {
   })
 })
 
+describe('review table — group heading sections (fix 4)', () => {
+  it('does not let a prior section heading block later fields', () => {
+    mount(`
+      <form>
+        <div><h3>Personal details</h3><label for="a">Email</label><input id="a"></div>
+        <div><h3>References</h3><label for="b">Reference email</label><input id="b"></div>
+        <div><label for="c">Phone</label><input id="c"></div>
+        <div><h3>Emergency contact</h3><label for="d">Phone number</label><input id="d"></div>
+      </form>
+    `)
+    const a = document.getElementById('a') as HTMLInputElement
+    const b = document.getElementById('b') as HTMLInputElement
+    const c = document.getElementById('c') as HTMLInputElement
+    const d = document.getElementById('d') as HTMLInputElement
+    expectBest(extractSignals(a), 'email')
+    expectBest(extractSignals(b), null)
+    expectBest(extractSignals(c), 'phone')
+    expectBest(extractSignals(d), null)
+  })
+
+  it('still blocks when a head-only sibling carries Emergency contact', () => {
+    mount(`
+      <form>
+        <div class="head"><h3>Emergency contact</h3></div>
+        <div><label for="p">Phone</label><input id="p"></div>
+      </form>
+    `)
+    const p = document.getElementById('p') as HTMLInputElement
+    expectBest(extractSignals(p), null)
+  })
+})
+
 describe('review table — identifier haystacks (fix 3)', () => {
   it('matches urls[LinkedIn] / urls[GitHub] / urls[Portfolio] by name', () => {
     expectBest({ name: 'urls[LinkedIn]' }, 'linkedinUrl')
