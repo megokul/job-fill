@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Distractor fields</title>
+  </head>
+  <body>
+    <h1>Apply</h1>
+    <form>
+      <h2>Your details</h2>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" />
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="tel" autocomplete="tel" />
+
+      <h2>References</h2>
+      <label for="ref-first">Reference first name</label>
+      <input id="ref-first" name="ref_first" />
+      <label for="ref-last">Reference last name</label>
+      <input id="ref-last" name="ref_last" />
+      <label for="ref-email">Reference email</label>
+      <input id="ref-email" name="ref_email" type="email" />
+
+      <h2>Emergency contact</h2>
+      <label for="em-phone">Phone number</label>
+      <input id="em-phone" name="emergency_phone" type="tel" />
+      <label for="em-name">Contact name</label>
+      <input id="em-name" name="emergency_name" />
+
+      <label for="hear">How did you hear about this opportunity?</label>
+      <textarea id="hear" name="hear"></textarea>
+      <label for="about">Tell us about yourself</label>
+      <textarea id="about" name="about"></textarea>
+
+      <label>
+        <input id="newsletter" type="checkbox" name="newsletter" />
+        Subscribe to our newsletter
+      </label>
+    </form>
+  </body>
+</html>

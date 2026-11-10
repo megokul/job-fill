@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Late-rendered form</title>
+  </head>
+  <body>
+    <header>
+      <input id="search" name="q" placeholder="Search jobs" />
+    </header>
+    <div id="mount"></div>
+    <script>
+      window.setTimeout(() => {
+        document.getElementById('mount').innerHTML = `
+          <form id="late-form">
+            <label for="first">First name</label>
+            <input id="first" name="firstName" autocomplete="given-name" />
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" />
+            <label for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" autocomplete="tel" />
+          </form>
+        `
+      }, 2000)
+    </script>
+  </body>
+</html>

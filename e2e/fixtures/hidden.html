@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hidden field harvest</title>
+    <style>
+      .tiny {
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      }
+      .offscreen {
+        position: absolute;
+        left: -10000px;
+        top: 0;
+      }
+      .clipped {
+        clip: rect(0 0 0 0);
+        position: absolute;
+      }
+      .clip-path {
+        clip-path: inset(50%);
+      }
+      .faint {
+        opacity: 0.01;
+      }
+      .styled-radio {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        clip: rect(0 0 0 0);
+      }
+      .radio-label {
+        display: inline-block;
+        padding: 8px 12px;
+        border: 1px solid #333;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <form>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" />
+
+      <label for="phone-display-none" style="display: none">Phone hidden display</label>
+      <input
+        id="phone-display-none"
+        name="phone_display"
+        type="tel"
+        style="display: none"
+      />
+
+      <div class="tiny">
+        <label for="phone-tiny">Phone tiny</label>
+        <input id="phone-tiny" name="phone_tiny" type="tel" />
+      </div>
+
+      <div class="offscreen">
+        <label for="addr-off">Address offscreen</label>
+        <input id="addr-off" name="address1" autocomplete="address-line1" />
+      </div>
+
+      <div class="clipped">
+        <label for="addr-clip">Address clipped</label>
+        <input id="addr-clip" name="address_clip" />
+      </div>
+
+      <div class="clip-path">
+        <label for="city-clip">City clip-path</label>
+        <input id="city-clip" name="city_clip" autocomplete="address-level2" />
+      </div>
+
+      <div class="faint">
+        <label for="phone-faint">Phone faint</label>
+        <input id="phone-faint" name="phone_faint" type="tel" />
+      </div>
+
+      <div aria-hidden="true">
+        <label for="phone-aria">Phone aria-hidden</label>
+        <input id="phone-aria" name="phone_aria" type="tel" />
+      </div>
+
+      <div inert>
+        <label for="phone-inert">Phone inert</label>
+        <input id="phone-inert" name="phone_inert" type="tel" />
+      </div>
+
+      <fieldset>
+        <legend>Are you legally authorized to work in the United States?</legend>
+        <label class="radio-label">
+          <input class="styled-radio" type="radio" name="work_auth" value="yes" />
+          Yes
+        </label>
+        <label class="radio-label">
+          <input class="styled-radio" type="radio" name="work_auth" value="no" />
+          No
+        </label>
+      </fieldset>
+    </form>
+  </body>
+</html>

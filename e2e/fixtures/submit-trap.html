@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Submit trap</title>
+  </head>
+  <body>
+    <form id="trap">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" />
+      <label for="first">First name</label>
+      <input id="first" name="firstName" autocomplete="given-name" />
+      <button id="submit-btn" type="submit">Submit</button>
+    </form>
+    <script>
+      document.getElementById('trap').addEventListener('submit', (e) => {
+        e.preventDefault()
+        window.__submitted = true
+      })
+      document.getElementById('submit-btn').addEventListener('click', () => {
+        window.__submitted = true
+      })
+    </script>
+  </body>
+</html>
