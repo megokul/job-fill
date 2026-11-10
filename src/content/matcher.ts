@@ -226,13 +226,6 @@ export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
         score = 70 + needle.length
         if (kind === 'label') score += 8
         if (kind === 'aria') score += 6
-      } else if (
-        needleTokens.length === 1 &&
-        tokenOverlap(hay, needle) >= 0.7 &&
-        needle.length >= 4
-      ) {
-        // Multi-token synonyms require consecutive whole tokens; overlap is for single tokens only.
-        score = 45 + needle.length / 2
       }
 
       best = Math.max(best, score)
@@ -318,14 +311,6 @@ function isBlockedByKeyBlockers(key: FillKey, labelText: string): boolean {
     const tokens = normalizeText(phrase).split(' ').filter(Boolean)
     return hasConsecutiveTokens(labelText, tokens)
   })
-}
-
-function tokenOverlap(a: string, b: string): number {
-  const at = new Set(a.split(' ').filter(Boolean))
-  const bt = b.split(' ').filter(Boolean)
-  if (bt.length === 0) return 0
-  const hit = bt.filter((t) => at.has(t)).length
-  return hit / bt.length
 }
 
 function getRadioGroupQuestion(el: HTMLInputElement): string {

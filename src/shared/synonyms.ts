@@ -47,9 +47,6 @@ export const NEGATIVE_GROUP = [
   'spouse',
 ] as const
 
-/** @deprecated use NEGATIVE_LABEL / NEGATIVE_GROUP */
-export const NEGATIVE_CONTEXT = NEGATIVE_LABEL
-
 /** Synonyms that only match when the whole haystack equals the phrase. */
 export const EXACT_ONLY = new Set<string>(['name'])
 
@@ -251,7 +248,3 @@ function hasNegativeTokens(
   return list.some((neg) => tokens.has(neg))
 }
 
-/** @deprecated */
-export function hasNegativeContext(...parts: Array<string | undefined>): boolean {
-  return hasNegativeLabel(...parts) || hasNegativeGroup(...parts)
-}

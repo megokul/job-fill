@@ -62,7 +62,7 @@ export function fillPage(
         const previous = capturePrevious(el)
         if (setControlValue(el, answer.answer, null)) {
           filledElements.add(el)
-          recordUndo({ element: el, fillKey: 'howDidYouHear', previous })
+          recordUndo({ element: el, previous })
           filled.push({
             label: bestLabel(extractSignals(el)),
             target: answer.question || 'Custom answer',
@@ -79,7 +79,7 @@ export function fillPage(
       const previous = capturePrevious(el)
       if (setControlValue(el, value, field.profileKey)) {
         filledElements.add(el)
-        recordUndo({ element: el, fillKey: field.profileKey, previous })
+        recordUndo({ element: el, previous })
         filled.push({
           label: bestLabel(extractSignals(el)),
           target: FILL_KEY_LABELS[field.profileKey],
@@ -101,7 +101,7 @@ export function fillPage(
     const previous = capturePrevious(match.element)
     if (setControlValue(match.element, value, match.fillKey)) {
       filledElements.add(match.element)
-      recordUndo({ element: match.element, fillKey: match.fillKey, previous })
+      recordUndo({ element: match.element, previous })
       filled.push({
         label: bestLabel(match.signals),
         target: FILL_KEY_LABELS[match.fillKey],

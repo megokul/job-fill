@@ -1,9 +1,7 @@
-import type { FillKey } from '../shared/types'
 import { getRadioGroupMembers } from './matcher'
 
 export type UndoEntry = {
   element: HTMLElement
-  fillKey: FillKey
   previous: {
     kind: 'value' | 'checked' | 'select' | 'radio'
     value?: string
@@ -55,8 +53,7 @@ function setNativeChecked(el: HTMLInputElement, checked: boolean): void {
 export function undoLastFill(): { restored: number } {
   let restored = 0
   for (const entry of [...snapshot].reverse()) {
-    const { element, previous, fillKey } = entry
-    void fillKey
+    const { element, previous } = entry
 
     if (previous.kind === 'radio' && element instanceof HTMLInputElement) {
       const group = getRadioGroupMembers(element)
