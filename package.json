@@ -12,8 +12,9 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "check": "tsc --noEmit && eslint . && vitest run",
+    "build:e2e": "tsc --noEmit && vite build --mode e2e",
     "build:e2e-fixtures": "vite build --config e2e/fixtures/react/vite.config.ts",
-    "e2e": "npm run build && npm run build:e2e-fixtures && playwright test -c e2e/playwright.config.ts",
+    "e2e": "npm run build:e2e && npm run build:e2e-fixtures && playwright test -c e2e/playwright.config.ts",
     "check:all": "npm run check && npm run e2e",
     "package": "npm run build && node scripts/package.mjs"
   },

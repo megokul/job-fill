@@ -12,7 +12,7 @@ import type { Store } from '../src/shared/types'
 import { makeStore } from './helpers/profile'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
-const extensionPath = path.resolve(root, '..', 'dist')
+const extensionPath = path.resolve(root, '..', 'dist-e2e')
 
 type Fixtures = {
   context: BrowserContext
@@ -29,7 +29,7 @@ export const test = base.extend<Fixtures>({
   context: async ({}, use) => {
     if (!fs.existsSync(path.join(extensionPath, 'manifest.json'))) {
       throw new Error(
-        `Extension build missing at ${extensionPath}. Run npm run build first.`,
+        `Extension build missing at ${extensionPath}. Run npm run build:e2e first.`,
       )
     }
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'job-fill-e2e-'))

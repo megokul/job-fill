@@ -7,6 +7,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'dist-e2e/**',
       'node_modules/**',
       'e2e-report/**',
       'e2e/fixtures/react-dist/**',

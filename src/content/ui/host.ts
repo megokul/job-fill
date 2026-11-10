@@ -30,8 +30,10 @@ export function ensureUiHost(): ShadowRoot {
     existing.style.height = '0'
     document.documentElement.appendChild(existing)
   }
-  // Open shadow so Playwright E2E (and the page) can reach map-mode / toast UI.
-  shadow = existing.shadowRoot ?? existing.attachShadow({ mode: 'open' })
+  // Production keeps a closed shadow so pages cannot read map-mode UI.
+  // The e2e Vite mode builds with mode "open" for Playwright access.
+  const shadowMode = import.meta.env.MODE === 'e2e' ? 'open' : 'closed'
+  shadow = existing.shadowRoot ?? existing.attachShadow({ mode: shadowMode })
   if (shadow.querySelector('.layer')) return shadow
   const style = document.createElement('style')
   style.textContent = `
