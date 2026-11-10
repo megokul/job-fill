@@ -14,7 +14,8 @@
     "check": "tsc --noEmit && eslint . && vitest run",
     "build:e2e-fixtures": "vite build --config e2e/fixtures/react/vite.config.ts",
     "e2e": "npm run build && npm run build:e2e-fixtures && playwright test -c e2e/playwright.config.ts",
-    "check:all": "npm run check && npm run e2e"
+    "check:all": "npm run check && npm run e2e",
+    "package": "npm run build && node scripts/package.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",
@@ -25,6 +26,7 @@
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",
     "happy-dom": "^21.0.4",
+    "jszip": "^3.10.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-select": "^5.10.2",
