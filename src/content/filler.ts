@@ -12,9 +12,16 @@ import type {
 } from '../shared/types'
 import { FILL_KEY_LABELS } from '../shared/types'
 import {
+  canFillAsCombobox,
+  comboboxDisplayText,
+  fillCombobox,
+  isComboboxEmpty,
+} from './combobox'
+import {
   collectFillableElements,
   extractSignals,
   getRadioGroupMembers,
+  isComboboxControl,
   labelOwnText,
   matchFields,
   type FieldSignals,
@@ -27,6 +34,19 @@ import {
 } from './undo'
 
 const CHECKBOX_KEYS = new Set<FillKey>(['workAuthorized', 'requiresSponsorship'])
+
+async function applyValue(
+  el: HTMLElement,
+  value: string,
+  fillKey: FillKey | null,
+  isCustomAnswer: boolean,
+): Promise<boolean> {
+  if (isComboboxControl(el)) {
+    if (!canFillAsCombobox(el, fillKey, isCustomAnswer)) return false
+    return fillCombobox(el, value, fillKey)
+  }
+  return setControlValue(el, value, fillKey)
+}
 
 export async function fillPage(
   profile: Profile,
@@ -60,7 +80,7 @@ export async function fillPage(
         const answer = customAnswers.find((a) => a.id === field.customAnswerId)
         if (!answer?.answer.trim()) continue
         const previous = capturePrevious(el)
-        if (setControlValue(el, answer.answer, null)) {
+        if (await applyValue(el, answer.answer, null, true)) {
           filledElements.add(el)
           recordUndo({ element: el, previous })
           filled.push({
@@ -77,7 +97,7 @@ export async function fillPage(
       const value = resolveValue(profile, field.profileKey)
       if (!String(value ?? '').trim()) continue
       const previous = capturePrevious(el)
-      if (setControlValue(el, value, field.profileKey)) {
+      if (await applyValue(el, value, field.profileKey, false)) {
         filledElements.add(el)
         recordUndo({ element: el, previous })
         filled.push({
@@ -99,7 +119,7 @@ export async function fillPage(
     const value = resolveValue(profile, match.fillKey)
     if (!String(value ?? '').trim()) continue
     const previous = capturePrevious(match.element)
-    if (setControlValue(match.element, value, match.fillKey)) {
+    if (await applyValue(match.element, value, match.fillKey, false)) {
       filledElements.add(match.element)
       recordUndo({ element: match.element, previous })
       filled.push({
@@ -304,12 +324,16 @@ function toBoolean(value: string): boolean | null {
 }
 
 export function isEmptyControl(el: HTMLElement): boolean {
+  if (isComboboxControl(el) && !(el instanceof HTMLInputElement)) {
+    return isComboboxEmpty(el)
+  }
   if (el instanceof HTMLInputElement) {
     const type = (el.type || 'text').toLowerCase()
     if (type === 'checkbox') return !el.checked
     if (type === 'radio') {
       return getRadioGroupMembers(el).every((r) => !r.checked)
     }
+    if (isComboboxControl(el)) return isComboboxEmpty(el)
     return el.value.trim() === ''
   }
   if (el instanceof HTMLTextAreaElement) return el.value.trim() === ''
@@ -326,8 +350,11 @@ export function isEmptyControl(el: HTMLElement): boolean {
       text.includes('please select')
     )
   }
+  if (isComboboxControl(el)) return isComboboxEmpty(el)
   return true
 }
+
+export { comboboxDisplayText }
 
 function signalSimilarity(a: FieldSignals, b: FieldSignals): number {
   let score = 0
