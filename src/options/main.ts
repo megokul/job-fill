@@ -26,6 +26,7 @@ import {
 import { mergeStores } from '../shared/mergeStores'
 import { parseBackup } from '../shared/validate'
 import {
+  profileForSave,
   suggestHttps,
   validateProfileField,
 } from '../shared/profileValidation'
@@ -70,7 +71,7 @@ const GROUPS: { title: string; keys: ProfileKey[] }[] = [
 ]
 
 let store: Store
-let saveTimer: number | undefined
+const fieldSaveTimers = new Map<ProfileKey, number>()
 let deletedMapping: FormMapping | null = null
 let deletedTimer: number | undefined
 
@@ -112,6 +113,24 @@ function renderAll(): void {
   renderBackup()
 }
 
+function updateProfileChrome(): void {
+  const filled = PROFILE_KEYS.filter((k) => String(store.profile[k]).trim()).length
+  const pct = Math.round((filled / PROFILE_KEYS.length) * 100)
+  const completeness = document.getElementById('profile-completeness')
+  if (completeness) {
+    completeness.textContent = `Completeness ${filled}/${PROFILE_KEYS.length}`
+  }
+  const bar = document.getElementById('profile-progress-bar')
+  if (bar) bar.style.width = `${pct}%`
+  const saved = document.getElementById('profile-saved')
+  if (saved) {
+    saved.textContent = `Saved ✓ ${new Date().toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`
+  }
+}
+
 function renderProfile(): void {
   const root = document.getElementById('profile')!
   clear(root)
@@ -126,8 +145,16 @@ function renderProfile(): void {
       h('h1', null, 'Profile'),
       saved,
     ),
-    h('div', null, `Completeness ${filled}/${PROFILE_KEYS.length}`),
-    h('div', { className: 'progress' }, h('span', { style: { width: `${pct}%` } })),
+    h(
+      'div',
+      { id: 'profile-completeness' },
+      `Completeness ${filled}/${PROFILE_KEYS.length}`,
+    ),
+    h(
+      'div',
+      { className: 'progress' },
+      h('span', { id: 'profile-progress-bar', style: { width: `${pct}%` } }),
+    ),
   )
 
   for (const group of GROUPS) {
@@ -202,11 +229,10 @@ function profileField(key: ProfileKey): HTMLElement {
   }
 
   const onChange = () => {
-    const value = input.value
-    const message = validateProfileField(key, value)
-    error.textContent = message ?? ''
+    queueProfileSave()
+    const message = validateProfileField(key, input.value)
     if (message && URL_KEYS.has(key)) {
-      const suggestion = suggestHttps(value)
+      const suggestion = suggestHttps(input.value)
       if (suggestion) {
         error.textContent = `${message} `
         const fix = h('button', { type: 'button', className: 'btn' }, 'Use https://')
@@ -217,15 +243,20 @@ function profileField(key: ProfileKey): HTMLElement {
         })
         error.append(fix)
       }
-      return
     }
-    if (!message) queueProfileSave()
   }
 
   input.addEventListener('blur', onChange)
   input.addEventListener('input', () => {
-    window.clearTimeout(saveTimer)
-    saveTimer = window.setTimeout(onChange, 600)
+    const prev = fieldSaveTimers.get(key)
+    if (prev !== undefined) window.clearTimeout(prev)
+    fieldSaveTimers.set(
+      key,
+      window.setTimeout(() => {
+        fieldSaveTimers.delete(key)
+        onChange()
+      }, 600),
+    )
   })
 
   return h(
@@ -238,16 +269,17 @@ function profileField(key: ProfileKey): HTMLElement {
 }
 
 function queueProfileSave(): void {
-  const profile = readProfile()
-  const invalid = PROFILE_KEYS.some((k) => validateProfileField(k, String(profile[k])))
-  if (invalid) return
+  const draft = readProfile()
+  const { profile, errors } = profileForSave(store.profile, draft)
+  const byKey = new Map(errors.map((e) => [e.key, e.message]))
+  for (const key of PROFILE_KEYS) {
+    const errEl = document.getElementById(`err-${key}`)
+    if (!errEl) continue
+    errEl.textContent = byKey.get(key) ?? ''
+  }
   void (async () => {
     store = await saveProfile(profile)
-    const el = document.getElementById('profile-saved')
-    if (el) {
-      el.textContent = `Saved ✓ ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    }
-    renderProfile()
+    updateProfileChrome()
   })()
 }
 

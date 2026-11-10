@@ -1,5 +1,5 @@
 import type { Profile, ProfileKey } from './types'
-import { PROFILE_LABELS } from './types'
+import { PROFILE_KEYS, PROFILE_LABELS } from './types'
 
 export type FieldError = { key: ProfileKey; message: string }
 
@@ -38,4 +38,22 @@ export function validateProfile(profile: Profile): FieldError[] {
     if (message) errors.push({ key, message })
   }
   return errors
+}
+
+/**
+ * Decide which draft values are written: invalid fields keep the previous
+ * stored value; all other fields take the draft.
+ */
+export function profileForSave(
+  current: Profile,
+  draft: Profile,
+): { profile: Profile; errors: FieldError[] } {
+  const errors = validateProfile(draft)
+  const invalid = new Set(errors.map((e) => e.key))
+  const profile = { ...current }
+  for (const key of PROFILE_KEYS) {
+    if (invalid.has(key)) continue
+    ;(profile as Record<string, string>)[key] = draft[key]
+  }
+  return { profile, errors }
 }
