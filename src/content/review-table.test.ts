@@ -199,7 +199,7 @@ describe('review table — identifier haystacks (fix 3)', () => {
 })
 
 describe('review table — wrapped label own text (fix 1)', () => {
-  it('strips select options from a wrapping label', () => {
+  it('strips select options from a wrapping label', async () => {
     mount(`
       <label>Country
         <select id="c">
@@ -212,7 +212,7 @@ describe('review table — wrapped label own text (fix 1)', () => {
     fakeVisible()
     const select = document.getElementById('c') as HTMLSelectElement
     expect(extractSignals(select).label).toBe('Country')
-    const result = fillPage(
+    const result = await fillPage(
       { ...EMPTY_PROFILE, country: 'United States' },
       [],
       { ...DEFAULT_SETTINGS, highlightFilled: false },

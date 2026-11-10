@@ -11,6 +11,7 @@ export default tseslint.config(
       'e2e-report/**',
       'e2e/fixtures/react-dist/**',
       'e2e/**/*.mjs',
+      'scripts/**',
     ],
   },
   {

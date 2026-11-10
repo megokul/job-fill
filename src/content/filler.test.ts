@@ -48,7 +48,7 @@ beforeEach(() => {
 })
 
 describe('collectFillableElements visibility injection', () => {
-  it('uses injectable isVisible for happy-dom', () => {
+  it('uses injectable isVisible for happy-dom', async () => {
     mount(labelForHtml)
     const none = collectFillableElements(document, {
       isVisible: () => false,
@@ -60,55 +60,55 @@ describe('collectFillableElements visibility injection', () => {
 })
 
 describe('confirmed matcher false positives fixed', () => {
-  it('does not match "How did you hear about this opportunity?"', () => {
+  it('does not match "How did you hear about this opportunity?"', async () => {
     expect(
       scoreField({ label: 'How did you hear about this opportunity?' }, 'addressLine2'),
     ).toBe(0)
   })
 
-  it('does not match "Ethnicity" to city', () => {
+  it('does not match "Ethnicity" to city', async () => {
     expect(scoreField({ label: 'Ethnicity' }, 'city')).toBe(0)
   })
 
-  it('does not match "Personal statement" to state', () => {
+  it('does not match "Personal statement" to state', async () => {
     expect(scoreField({ label: 'Personal statement' }, 'state')).toBe(0)
   })
 
-  it('does not match "Tell us about yourself" to phone', () => {
+  it('does not match "Tell us about yourself" to phone', async () => {
     expect(scoreField({ label: 'Tell us about yourself' }, 'phone')).toBe(0)
   })
 
-  it('does not match "Hotel preference" to phone', () => {
+  it('does not match "Hotel preference" to phone', async () => {
     expect(scoreField({ label: 'Hotel preference' }, 'phone')).toBe(0)
   })
 
-  it('does not match "Reference last name" to lastName', () => {
+  it('does not match "Reference last name" to lastName', async () => {
     expect(scoreField({ label: 'Reference last name' }, 'lastName')).toBe(0)
   })
 
-  it('matches "Full name" as fullName', () => {
+  it('matches "Full name" as fullName', async () => {
     expect(scoreField({ label: 'Full name' }, 'fullName')).toBeGreaterThanOrEqual(40)
   })
 
-  it('maps autocomplete address-level2 to city, not addressLine1', () => {
+  it('maps autocomplete address-level2 to city, not addressLine1', async () => {
     expect(scoreField({ autocomplete: 'address-level2' }, 'city')).toBeGreaterThan(
       scoreField({ autocomplete: 'address-level2' }, 'addressLine1'),
     )
   })
 
-  it('maps autocomplete address-level1 to state, not addressLine1', () => {
+  it('maps autocomplete address-level1 to state, not addressLine1', async () => {
     expect(scoreField({ autocomplete: 'address-level1' }, 'state')).toBeGreaterThan(
       scoreField({ autocomplete: 'address-level1' }, 'addressLine1'),
     )
   })
 
-  it('maps autocomplete url to portfolioUrl', () => {
+  it('maps autocomplete url to portfolioUrl', async () => {
     expect(scoreField({ autocomplete: 'url' }, 'portfolioUrl')).toBeGreaterThanOrEqual(40)
   })
 })
 
 describe('selectOption fixes', () => {
-  it('matches Yes/No select options by value or text separately', () => {
+  it('matches Yes/No select options by value or text separately', async () => {
     mount(selectsHtml)
     const select = document.getElementById('auth') as HTMLSelectElement
     const ok = selectOptionForTest(select, 'yes', 'workAuthorized')
@@ -116,7 +116,7 @@ describe('selectOption fixes', () => {
     expect(select.value).toBe('1')
   })
 
-  it('does not select Australia when country is US via substring', () => {
+  it('does not select Australia when country is US via substring', async () => {
     mount(selectsHtml)
     const select = document.getElementById('country') as HTMLSelectElement
     selectOptionForTest(select, 'US', 'country')
@@ -124,7 +124,7 @@ describe('selectOption fixes', () => {
     expect(select.selectedOptions[0]?.text).toMatch(/United States/i)
   })
 
-  it('does not select American Samoa when state is CA via substring', () => {
+  it('does not select American Samoa when state is CA via substring', async () => {
     mount(selectsHtml)
     const select = document.getElementById('state') as HTMLSelectElement
     selectOptionForTest(select, 'CA', 'state')
@@ -134,7 +134,7 @@ describe('selectOption fixes', () => {
 })
 
 describe('native setter and radios', () => {
-  it('does not call focus() when setting text (avoids page scroll)', () => {
+  it('does not call focus() when setting text (avoids page scroll)', async () => {
     mount('<input id="x" />')
     const el = document.getElementById('x') as HTMLInputElement
     let focused = false
@@ -146,7 +146,7 @@ describe('native setter and radios', () => {
     expect(el.value).toBe('Ada')
   })
 
-  it('sets value through native setter so input listeners see it', () => {
+  it('sets value through native setter so input listeners see it', async () => {
     mount('<input id="x" />')
     const el = document.getElementById('x') as HTMLInputElement
     let seen = ''
@@ -157,7 +157,7 @@ describe('native setter and radios', () => {
     expect(seen).toBe('Ada')
   })
 
-  it('treats radio groups as one field using the legend question', () => {
+  it('treats radio groups as one field using the legend question', async () => {
     mount(radioGroupsHtml)
     const els = collectFillableElements(document, { isVisible: alwaysVisible })
     const radios = els.filter(
@@ -169,7 +169,7 @@ describe('native setter and radios', () => {
     expect(signals.label?.toLowerCase()).toContain('authorized to work')
   })
 
-  it('collects two identical nameless radiogroups as separate fields and both get answered', () => {
+  it('collects two identical nameless radiogroups as separate fields and both get answered', async () => {
     const group = `
       <div role="radiogroup">
         <label><input type="radio" value="yes" /> Yes</label>
@@ -198,7 +198,7 @@ describe('native setter and radios', () => {
 })
 
 describe('fixture smoke', () => {
-  it('mounts distractors and does not heuristically fill them', () => {
+  it('mounts distractors and does not heuristically fill them', async () => {
     mount(distractorsHtml)
     for (const el of document.querySelectorAll('input,textarea,select')) {
       Object.defineProperty(el, 'getBoundingClientRect', {
@@ -217,14 +217,14 @@ describe('fixture smoke', () => {
         }),
       })
     }
-    const result = fillPage(sampleProfile, [], {
+    const result = await fillPage(sampleProfile, [], {
       ...DEFAULT_SETTINGS,
       highlightFilled: false,
     })
     expect(result.filled).toHaveLength(0)
   })
 
-  it('mounts wrapped labels and matches full name', () => {
+  it('mounts wrapped labels and matches full name', async () => {
     mount(wrappedLabelHtml)
     const els = collectFillableElements(document, { isVisible: alwaysVisible })
     expect(els.length).toBe(4)
@@ -232,7 +232,7 @@ describe('fixture smoke', () => {
     expect(matches.some((m) => m.fillKey === 'fullName')).toBe(true)
   })
 
-  it('fillPage fills labelFor autocomplete fields', () => {
+  it('fillPage fills labelFor autocomplete fields', async () => {
     mount(labelForHtml)
     for (const el of document.querySelectorAll('input,textarea,select')) {
       Object.defineProperty(el, 'getBoundingClientRect', {
@@ -251,7 +251,7 @@ describe('fixture smoke', () => {
         }),
       })
     }
-    const result = fillPage(sampleProfile, [], {
+    const result = await fillPage(sampleProfile, [], {
       ...DEFAULT_SETTINGS,
       highlightFilled: false,
     })
@@ -283,16 +283,16 @@ describe('fill → undo round trip', () => {
     }
   }
 
-  it('restores text input', () => {
+  it('restores text input', async () => {
     mount('<label for="fn">First name</label><input id="fn" name="first_name" />')
     fakeVisible()
-    fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
+    await fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
     expect((document.getElementById('fn') as HTMLInputElement).value).toBe('Ada')
     undoLastFill()
     expect((document.getElementById('fn') as HTMLInputElement).value).toBe('')
   })
 
-  it('restores select', () => {
+  it('restores select', async () => {
     mount(`
       <label for="country">Country</label>
       <select id="country" name="country">
@@ -302,7 +302,7 @@ describe('fill → undo round trip', () => {
       </select>
     `)
     fakeVisible()
-    const result = fillPage(sampleProfile, [], {
+    const result = await fillPage(sampleProfile, [], {
       ...DEFAULT_SETTINGS,
       highlightFilled: false,
     })
@@ -313,21 +313,21 @@ describe('fill → undo round trip', () => {
     expect(country.value).toBe('')
   })
 
-  it('restores checkbox', () => {
+  it('restores checkbox', async () => {
     mount(
       '<label><input id="wa" type="checkbox" name="work_authorized" /> Authorized to work</label>',
     )
     fakeVisible()
-    fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
+    await fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
     expect((document.getElementById('wa') as HTMLInputElement).checked).toBe(true)
     undoLastFill()
     expect((document.getElementById('wa') as HTMLInputElement).checked).toBe(false)
   })
 
-  it('restores radio group after filling yes', () => {
+  it('restores radio group after filling yes', async () => {
     mount(radioGroupsHtml)
     fakeVisible()
-    fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
+    await fillPage(sampleProfile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
     const yes = document.querySelector(
       'input[name="work_auth"][value="yes"]',
     ) as HTMLInputElement
@@ -340,11 +340,11 @@ describe('fill → undo round trip', () => {
     expect(anyChecked).toBe(false)
   })
 
-  it('fills a mapped custom answer into a textarea', () => {
+  it('fills a mapped custom answer into a textarea', async () => {
     mount('<label for="why">Why us?</label><textarea id="why" name="why"></textarea>')
     fakeVisible()
     const answerId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
-    const result = fillPage(
+    const result = await fillPage(
       sampleProfile,
       [
         {
@@ -380,7 +380,7 @@ describe('fill → undo round trip', () => {
     expect(result.filled[0]?.target).toBe('Why us?')
   })
 
-  it('fills a mapped custom answer into a select', () => {
+  it('fills a mapped custom answer into a select', async () => {
     mount(`
       <label for="hear">How did you hear?</label>
       <select id="hear" name="hear">
@@ -391,7 +391,7 @@ describe('fill → undo round trip', () => {
     `)
     fakeVisible()
     const answerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-    const result = fillPage(
+    const result = await fillPage(
       sampleProfile,
       [
         {
@@ -427,7 +427,7 @@ describe('fill → undo round trip', () => {
     expect(result.filled[0]?.target).toBe('How did you hear?')
   })
 
-  it('unchecks radio group after filling no then undo', () => {
+  it('unchecks radio group after filling no then undo', async () => {
     mount(`
       <fieldset>
         <legend>Will you require sponsorship?</legend>
@@ -437,7 +437,7 @@ describe('fill → undo round trip', () => {
     `)
     fakeVisible()
     const profile = { ...sampleProfile, requiresSponsorship: 'no' as const }
-    fillPage(profile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
+    await fillPage(profile, [], { ...DEFAULT_SETTINGS, highlightFilled: false })
     const no = document.querySelector(
       'input[name="sponsor"][value="no"]',
     ) as HTMLInputElement

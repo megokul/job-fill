@@ -63,12 +63,12 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
     if (!sites || !sites.includes(location.origin)) return
 
     const store = await getStore()
-    const tryFill = (): FillResult =>
+    const tryFill = (): Promise<FillResult> =>
       fillPage(store.profile, store.formMappings, store.settings, {
         customAnswers: store.customAnswers,
       })
 
-    let result = tryFill()
+    let result = await tryFill()
     if (result.filled.length > 0) {
       showLocalFillToast(result)
       return
@@ -89,11 +89,13 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
           observer.disconnect()
           return
         }
-        result = tryFill()
-        if (result.filled.length > 0) {
-          observer.disconnect()
-          showLocalFillToast(result)
-        }
+        void tryFill().then((next) => {
+          result = next
+          if (result.filled.length > 0) {
+            observer.disconnect()
+            showLocalFillToast(result)
+          }
+        })
       }, 400)
     })
     observer.observe(document.documentElement, {
@@ -109,7 +111,7 @@ async function bootstrapAutofillOnLoad(): Promise<void> {
 async function runFill(): Promise<FillResult> {
   if (isMapModeActive()) stopMapMode()
   const store = await getStore()
-  return fillPage(store.profile, store.formMappings, store.settings, {
+  return await fillPage(store.profile, store.formMappings, store.settings, {
     customAnswers: store.customAnswers,
   })
 }
