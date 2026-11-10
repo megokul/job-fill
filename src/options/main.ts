@@ -23,6 +23,7 @@ import {
   type Store,
   type YesNo,
 } from '../shared/types'
+import { mergeStores } from '../shared/mergeStores'
 import { parseBackup } from '../shared/validate'
 import {
   suggestHttps,
@@ -555,6 +556,10 @@ function renderBackup(): void {
   const root = document.getElementById('backup')!
   clear(root)
   const preview = h('div', { className: 'muted', id: 'import-preview' })
+  const replaceConfirm = h('div', {
+    className: 'row',
+    style: 'display:none',
+  })
   const file = h('input', {
     type: 'file',
     accept: 'application/json,.json',
@@ -562,17 +567,93 @@ function renderBackup(): void {
   }) as HTMLInputElement
   let pending: ReturnType<typeof parseBackup> | null = null
 
+  const mergeBtn = h('button', {
+    className: 'btn',
+    type: 'button',
+    disabled: true,
+  }, 'Merge') as HTMLButtonElement
+  const replaceBtn = h('button', {
+    className: 'btn',
+    type: 'button',
+    disabled: true,
+  }, 'Replace') as HTMLButtonElement
+
+  const syncImportButtons = (): void => {
+    const ready = Boolean(pending && !pending.fatal)
+    mergeBtn.disabled = !ready
+    replaceBtn.disabled = !ready
+    replaceConfirm.style.display = 'none'
+  }
+
   file.addEventListener('change', async () => {
     const f = file.files?.[0]
-    if (!f) return
+    if (!f) {
+      pending = null
+      preview.textContent = ''
+      syncImportButtons()
+      return
+    }
     const text = await f.text()
     pending = parseBackup(text)
+    if (pending.fatal) {
+      preview.textContent = `Error — ${pending.errors.join('; ')}`
+      syncImportButtons()
+      return
+    }
     const p = pending.store.profile
     const filled = PROFILE_KEYS.filter((k) => String(p[k]).trim()).length
     preview.textContent = `Preview — profile: ${filled} fields, ${pending.store.formMappings.length} sites, ${pending.store.customAnswers.length} answers.${
       pending.errors.length ? ` Warnings: ${pending.errors.join('; ')}` : ''
     }`
+    syncImportButtons()
   })
+
+  mergeBtn.addEventListener('click', () => {
+    if (!pending || pending.fatal) return
+    void (async () => {
+      store = await replaceStore(mergeStores(store, pending!.store))
+      pending = null
+      file.value = ''
+      renderAll()
+    })()
+  })
+
+  replaceBtn.addEventListener('click', () => {
+    if (!pending || pending.fatal) return
+    replaceConfirm.style.display = ''
+  })
+
+  replaceConfirm.append(
+    h('span', null, 'Replace all current data?'),
+    h(
+      'button',
+      {
+        className: 'btn danger',
+        type: 'button',
+        onClick: () => {
+          if (!pending || pending.fatal) return
+          void replaceStore(pending.store).then((s) => {
+            store = s
+            pending = null
+            file.value = ''
+            renderAll()
+          })
+        },
+      },
+      'Confirm',
+    ),
+    h(
+      'button',
+      {
+        className: 'btn',
+        type: 'button',
+        onClick: () => {
+          replaceConfirm.style.display = 'none'
+        },
+      },
+      'Cancel',
+    ),
+  )
 
   const confirmInput = h('input', {
     placeholder: 'Type DELETE to confirm',
@@ -614,75 +695,21 @@ function renderBackup(): void {
       file,
     ),
     preview,
-    h(
-      'div',
-      { className: 'row' },
-      h(
-        'button',
-        {
-          className: 'btn',
-          type: 'button',
-          onClick: () => {
-            if (!pending) return
-            void (async () => {
-              const merged: Store = {
-                ...pending!.store,
-                formMappings: [
-                  ...store.formMappings,
-                  ...pending!.store.formMappings,
-                ],
-                customAnswers: [
-                  ...store.customAnswers,
-                  ...pending!.store.customAnswers,
-                ],
-                settings: {
-                  autofillSites: [
-                    ...new Set([
-                      ...store.settings.autofillSites,
-                      ...pending!.store.settings.autofillSites,
-                    ]),
-                  ],
-                  highlightFilled: pending!.store.settings.highlightFilled,
-                },
-              }
-              store = await replaceStore(merged)
-              pending = null
-              renderAll()
-            })()
-          },
+    h('div', { className: 'row' }, mergeBtn, replaceBtn, h(
+      'button',
+      {
+        className: 'btn',
+        type: 'button',
+        onClick: () => {
+          pending = null
+          preview.textContent = ''
+          file.value = ''
+          syncImportButtons()
         },
-        'Merge',
-      ),
-      h(
-        'button',
-        {
-          className: 'btn',
-          type: 'button',
-          onClick: () => {
-            if (!pending) return
-            void replaceStore(pending.store).then((s) => {
-              store = s
-              pending = null
-              renderAll()
-            })
-          },
-        },
-        'Replace',
-      ),
-      h(
-        'button',
-        {
-          className: 'btn',
-          type: 'button',
-          onClick: () => {
-            pending = null
-            preview.textContent = ''
-            file.value = ''
-          },
-        },
-        'Cancel',
-      ),
-    ),
+      },
+      'Cancel',
+    )),
+    replaceConfirm,
     h('hr'),
     h('h2', null, 'Delete all data'),
     confirmInput,

@@ -19,6 +19,18 @@ const UUID_RE =
 export type ParseBackupResult = {
   store: Store
   errors: string[]
+  /** True for invalid JSON or a non-object root — import actions must stay disabled. */
+  fatal: boolean
+}
+
+function emptyParseStore(): Store {
+  return {
+    profile: { ...EMPTY_PROFILE },
+    formMappings: [],
+    settings: { ...DEFAULT_SETTINGS },
+    customAnswers: [],
+    schemaVersion: 1,
+  }
 }
 
 export function parseBackup(json: string): ParseBackupResult {
@@ -28,27 +40,17 @@ export function parseBackup(json: string): ParseBackupResult {
     raw = JSON.parse(json)
   } catch {
     return {
-      store: {
-        profile: { ...EMPTY_PROFILE },
-        formMappings: [],
-        settings: { ...DEFAULT_SETTINGS },
-        customAnswers: [],
-        schemaVersion: 1,
-      },
+      store: emptyParseStore(),
       errors: ['Invalid JSON'],
+      fatal: true,
     }
   }
 
-  if (!raw || typeof raw !== 'object') {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return {
-      store: {
-        profile: { ...EMPTY_PROFILE },
-        formMappings: [],
-        settings: { ...DEFAULT_SETTINGS },
-        customAnswers: [],
-        schemaVersion: 1,
-      },
+      store: emptyParseStore(),
       errors: ['Backup root must be an object'],
+      fatal: true,
     }
   }
 
@@ -67,6 +69,7 @@ export function parseBackup(json: string): ParseBackupResult {
       schemaVersion: 1,
     },
     errors,
+    fatal: false,
   }
 }
 
