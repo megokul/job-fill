@@ -12,6 +12,7 @@ import {
   SYNONYMS,
 } from '../shared/synonyms'
 import type { FieldMatchSignals, FillKey } from '../shared/types'
+import { isFillableVisible } from './visibility'
 
 export type FieldSignals = FieldMatchSignals & {
   ariaLabel?: string
@@ -432,11 +433,7 @@ function getAssociatedLabelText(el: HTMLElement): string {
 }
 
 function isVisible(el: HTMLElement): boolean {
-  const style = window.getComputedStyle(el)
-  if (style.display === 'none' || style.visibility === 'hidden') return false
-  if (style.opacity === '0') return false
-  const rect = el.getBoundingClientRect()
-  return rect.width > 0 || rect.height > 0
+  return isFillableVisible(el)
 }
 
 function cssEscape(value: string): string {
