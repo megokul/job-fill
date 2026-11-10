@@ -48,15 +48,26 @@ npm run build
 3. Use **Map this form** for stubborn fields; optionally add custom answers and map them.
 4. Toggle **Autofill on this site** after a mapping exists.
 
+## Licence
+
+MIT — see [LICENSE](LICENSE).
+
+## Privacy
+
+https://megokul.github.io/job-fill/privacy.html
+
 ## Scripts
 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | CRXJS/Vite HMR build into `dist/` |
 | `npm run build` | Typecheck + production build |
+| `npm run package` | Production build + zip under `release/` |
 | `npm test` | Vitest |
 | `npm run lint` | ESLint |
 | `npm run check` | `tsc` + ESLint + tests |
+| `npm run e2e` | Build e2e extension + Playwright suite |
+| `npm run check:all` | `check` then `e2e` |
 
 ## Scope
 
