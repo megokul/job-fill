@@ -1,8 +1,10 @@
 import { autocompleteToFillKey, inputTypeBoost } from '../shared/autocomplete'
 import {
   FILL_KEYS,
-  hasNegativeContext,
+  hasNegativeGroup,
+  hasNegativeLabel,
   normalizeText,
+  PERSONAL_KEYS,
   splitIdentifier,
   SYNONYMS,
 } from '../shared/synonyms'
@@ -115,10 +117,7 @@ export function extractSignals(el: HTMLElement): FieldSignals {
 }
 
 export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
-  if (
-    hasNegativeContext(signals.label, signals.ariaLabel, signals.group) &&
-    isBlockedByNegativeContext(fillKey, signals)
-  ) {
+  if (isBlockedByNegativeContext(fillKey, signals)) {
     return 0
   }
 
@@ -182,6 +181,19 @@ export function scoreField(signals: FieldSignals, fillKey: FillKey): number {
   return best
 }
 
+export function bestFillKey(signals: FieldSignals): FillKey | null {
+  let bestKey: FillKey | null = null
+  let bestScore = 0
+  for (const key of FILL_KEYS) {
+    const score = scoreField(signals, key)
+    if (score > bestScore) {
+      bestScore = score
+      bestKey = key
+    }
+  }
+  return bestKey && bestScore >= CONFIDENCE_THRESHOLD ? bestKey : null
+}
+
 export function matchFields(elements: HTMLElement[]): MatchCandidate[] {
   const scored: MatchCandidate[] = []
 
@@ -220,13 +232,21 @@ export function matchFields(elements: HTMLElement[]): MatchCandidate[] {
 }
 
 function isBlockedByNegativeContext(key: FillKey, signals: FieldSignals): boolean {
+  const negLabel = hasNegativeLabel(signals.label, signals.ariaLabel)
+  const negGroup = hasNegativeGroup(signals.group)
+
   if (key === 'currentCompany' || key === 'currentTitle') {
+    if (!negLabel && !negGroup) return false
     const text = normalizeText(
       [signals.label, signals.ariaLabel, signals.group].filter(Boolean).join(' '),
     )
+    // Exempt when the label/aria/group says current or present.
     if (/\b(current|present)\b/.test(text)) return false
+    return true
   }
-  return true
+
+  if (!PERSONAL_KEYS.has(key)) return false
+  return negLabel || negGroup
 }
 
 function hasConsecutiveTokens(hay: string, needleTokens: string[]): boolean {
@@ -278,19 +298,24 @@ function getRadioGroupQuestion(el: HTMLInputElement): string {
 
 function getGroupContext(el: HTMLElement): string {
   const fieldset = el.closest('fieldset')
-  const legend = fieldset?.querySelector('legend')
+  const legend = fieldset?.querySelector(':scope > legend')
   if (legend?.textContent?.trim()) return legend.textContent.trim()
 
-  const section = el.closest('section, [role="group"]')
-  const heading = section?.querySelector('h1,h2,h3,h4,h5,h6,legend')
-  if (heading?.textContent?.trim()) return heading.textContent.trim()
-
-  let prev = el.parentElement?.previousElementSibling
-  for (let i = 0; i < 3 && prev; i++) {
-    if (/^H[1-6]$/.test(prev.tagName)) {
-      return (prev.textContent ?? '').trim()
+  const form = el.closest('form') ?? document.body
+  // Walk previous siblings of the field and of its ancestors up to the form.
+  // Never use h1; never use "first heading in enclosing section".
+  let node: HTMLElement | null = el
+  while (node && node !== form) {
+    let prev = node.previousElementSibling
+    while (prev) {
+      if (/^H[2-6]$/.test(prev.tagName)) {
+        return (prev.textContent ?? '').trim()
+      }
+      const nested = prev.querySelector('h2,h3,h4,h5,h6')
+      if (nested?.textContent?.trim()) return nested.textContent.trim()
+      prev = prev.previousElementSibling
     }
-    prev = prev.previousElementSibling
+    node = node.parentElement
   }
   return ''
 }

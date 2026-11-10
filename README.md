@@ -14,6 +14,8 @@ Chrome extension (Manifest V3) that autofills job application forms from a **loc
 
 Never clicks Apply/Submit. No network calls for autofill.
 
+TypeScript is pinned to `~5.8.0` because `typescript-eslint` currently peers on TypeScript below 6.1; Vite accepts newer TypeScript, but the lint toolchain does not yet.
+
 ## Permissions
 
 | Permission | Why |

@@ -1,9 +1,32 @@
 import type { FillKey, ProfileKey } from './types'
 
-/** If any of these appear in label/aria/group, personal keys score 0. */
-export const NEGATIVE_CONTEXT = [
+/** Personal keys blocked by NEGATIVE_LABEL / NEGATIVE_GROUP. */
+export const PERSONAL_KEYS = new Set<FillKey>([
+  'firstName',
+  'lastName',
+  'fullName',
+  'preferredName',
+  'pronouns',
+  'email',
+  'phone',
+  'addressLine1',
+  'addressLine2',
+  'city',
+  'state',
+  'postalCode',
+  'country',
+  'location',
+  'linkedinUrl',
+  'portfolioUrl',
+  'githubUrl',
+])
+
+/** Checked against label and aria-label. */
+export const NEGATIVE_LABEL = [
   'reference',
+  'references',
   'referee',
+  'referees',
   'emergency',
   'company',
   'employer',
@@ -13,6 +36,19 @@ export const NEGATIVE_CONTEXT = [
   'university',
   'spouse',
 ] as const
+
+/** Checked against the group/section signal only. */
+export const NEGATIVE_GROUP = [
+  'reference',
+  'references',
+  'referee',
+  'referees',
+  'emergency',
+  'spouse',
+] as const
+
+/** @deprecated use NEGATIVE_LABEL / NEGATIVE_GROUP */
+export const NEGATIVE_CONTEXT = NEGATIVE_LABEL
 
 /** Lowercased synonym phrases mapped to fill keys. */
 export const SYNONYMS: Record<FillKey, string[]> = {
@@ -159,11 +195,27 @@ export function splitIdentifier(value: string): string {
     .replace(/(\d)([a-zA-Z])/g, '$1 $2')
 }
 
-export function hasNegativeContext(...parts: Array<string | undefined>): boolean {
+export function hasNegativeLabel(...parts: Array<string | undefined>): boolean {
+  return hasNegativeTokens(parts, NEGATIVE_LABEL)
+}
+
+export function hasNegativeGroup(...parts: Array<string | undefined>): boolean {
+  return hasNegativeTokens(parts, NEGATIVE_GROUP)
+}
+
+function hasNegativeTokens(
+  parts: Array<string | undefined>,
+  list: readonly string[],
+): boolean {
   const text = normalizeText(parts.filter(Boolean).join(' '))
   if (!text) return false
   const tokens = new Set(text.split(' ').filter(Boolean))
-  return NEGATIVE_CONTEXT.some((neg) => tokens.has(neg))
+  return list.some((neg) => tokens.has(neg))
+}
+
+/** @deprecated */
+export function hasNegativeContext(...parts: Array<string | undefined>): boolean {
+  return hasNegativeLabel(...parts) || hasNegativeGroup(...parts)
 }
 
 export function isProfileKey(key: string): key is ProfileKey {
