@@ -37,7 +37,7 @@ export default defineManifest({
       match_about_blank: true,
     },
   ],
-  permissions: ['storage', 'activeTab', 'scripting'],
+  permissions: ['storage', 'scripting'],
   host_permissions: ['http://*/*', 'https://*/*'],
   commands: {
     'fill-page': {

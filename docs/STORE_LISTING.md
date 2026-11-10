@@ -20,6 +20,6 @@ Used to call the content-script frame API (`fill`, `undo`, map mode, frame info)
 
 Job applications appear on many employer and ATS domains, often with the form inside a cross-origin iframe. Broad host access lets the content script and `scripting` API reach those frames. Autofill still only writes into empty fields the matcher or mapping targets; it does not scrape pages for a remote service.
 
-### `activeTab`
+### `activeTab` (removed)
 
-**Unused given the host permissions above.** Popup and keyboard-command flows use `scripting` with host access rather than temporary `activeTab` grants. It should be removed from the manifest so the listing does not claim a permission the product does not need.
+Previously unused given host permissions for `http(s)://*/*`. Popup and keyboard-command flows use `scripting` with those hosts rather than temporary `activeTab` grants, so it was removed from the manifest.

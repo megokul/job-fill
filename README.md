@@ -21,7 +21,6 @@ TypeScript is pinned to `~5.8.0` because `typescript-eslint` currently peers on 
 | Permission | Why |
 | --- | --- |
 | `storage` | Profile, mappings, settings in `chrome.storage.local` |
-| `activeTab` | Act on the current tab from the popup |
 | `scripting` | Call the content API in every frame (`fillTab` / `undoTab` / map mode) |
 | Host `http(s)://*/*` | Run content scripts (and reach cross-origin application iframes) |
 
