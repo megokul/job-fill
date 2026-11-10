@@ -3,6 +3,7 @@ import {
   datalistStateOptions,
 } from '../shared/regions'
 import {
+  deleteFieldMapping,
   deleteFormMapping,
   getStore,
   replaceStore,
@@ -529,15 +530,33 @@ function renderSites(): void {
             ...m.fields.map((f) =>
               h(
                 'li',
-                null,
-                f.profileKey
-                  ? FILL_KEY_LABELS[f.profileKey]
-                  : `Custom: ${
-                      store.customAnswers.find((a) => a.id === f.customAnswerId)?.question ||
-                      f.customAnswerId
-                    }`,
-                ' — ',
-                f.match.label || f.selector || '',
+                { className: 'row' },
+                h(
+                  'span',
+                  null,
+                  f.profileKey
+                    ? FILL_KEY_LABELS[f.profileKey]
+                    : `Custom: ${
+                        store.customAnswers.find((a) => a.id === f.customAnswerId)
+                          ?.question || 'Untitled'
+                      }`,
+                  ' — ',
+                  f.match.label || f.selector || '',
+                ),
+                h(
+                  'button',
+                  {
+                    className: 'btn',
+                    type: 'button',
+                    onClick: () => {
+                      void deleteFieldMapping(m.id, f.id).then((s) => {
+                        store = s
+                        renderSites()
+                      })
+                    },
+                  },
+                  'Remove',
+                ),
               ),
             ),
           ),
