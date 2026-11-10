@@ -14,12 +14,13 @@ Source: `docs/privacy.html` on the `job-fill` GitHub repo (GitHub Pages from `/d
 
 ## Developer account registration
 
-1. Open https://chrome.google.com/webstore/devconsole
-2. Sign in with the Google account that should own the listing (recommended: the account behind nvgokulkrishna@gmail.com).
+1. Open https://chrome.google.com/webstore/devconsole  
+   (Opened in the Cursor browser this session — stopped at Google Sign-in.)
+2. Sign in with the Google account that should own the listing (recommended: nvgokulkrishna@gmail.com).
 3. Pay the one-time Chrome Web Store developer registration fee when prompted.
 4. Complete the publisher profile (display name, contact email).
 
-This step requires your Google login and payment method; it cannot be finished by an automated agent.
+**Blocked on you:** Google login + one-time developer fee. No agent can complete those.
 
 ## Package
 
@@ -27,7 +28,9 @@ This step requires your Google login and payment method; it cannot be finished b
 npm run package
 ```
 
-Upload `release/job-fill-1.1.0.zip` (version may bump). The package script refuses to zip if production `dist/` contains an open shadow-root marker.
+Zip ready locally: `release/job-fill-1.1.0.zip`. The package script refuses to zip if production `dist/` contains an open shadow-root marker.
+
+**Upload:** after the developer account exists, create a new item in the dashboard and upload that zip. Listing copy + assets: `docs/STORE_LISTING.md` and `docs/store-assets/`.
 
 ## Listing fields
 
