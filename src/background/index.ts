@@ -1,6 +1,12 @@
 import type { Message } from '../shared/messages'
 import { fillTab, toastTopFrame, undoTab } from '../shared/tabApi'
 
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    void chrome.runtime.openOptionsPage()
+  }
+})
+
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
   if (message.type !== 'UNDO_TAB') return
   const tabId = sender.tab?.id
